@@ -15,8 +15,13 @@ from app.db.models.usage_event import UsageEvent
 from app.repositories.conversations import ConversationRepository
 from app.repositories.messages import MessageRepository
 from app.schemas.conversations import DEFAULT_TITLE, TITLE_MAX_LENGTH, files_from_parts
-from app.services.files import TEXT_MEDIA_TYPES, read_text_excerpt
-from app.services.ai.provider import ChatTurn, TokenUsage
+from app.services.ai.provider import ChatImage, ChatTurn, TokenUsage
+from app.services.files import (
+    IMAGE_MEDIA_TYPES,
+    TEXT_MEDIA_TYPES,
+    read_image_bytes,
+    read_text_excerpt,
+)
 from app.services.conversations import _not_found
 
 
@@ -208,14 +213,19 @@ class ChatService:
 
     async def _model_turns(self, messages: list[Message]) -> list[ChatTurn]:
         excerpts = await self._text_excerpts(messages)
+        images = await self._message_images(messages)
         turns: list[ChatTurn] = []
         for message in messages:
             if message.role not in {"user", "assistant", "system"}:
                 continue
-            content = _with_attached_text(message, excerpts)
+            content, attached = _with_attachments(message, excerpts, images)
             if content.strip():
                 turns.append(
-                    ChatTurn(role=message.role, content=content)  # type: ignore[arg-type]
+                    ChatTurn(
+                        role=message.role,  # type: ignore[arg-type]
+                        content=content,
+                        images=attached,
+                    )
                 )
         return turns
 
@@ -239,6 +249,48 @@ class ChatService:
             if text is not None:
                 excerpts[stored.id] = text
         return excerpts
+
+    async def _message_images(self, messages: list[Message]) -> dict[UUID, ChatImage]:
+        if self._settings is None:
+            return {}
+        file_ids = [
+            attached.id
+            for message in messages
+            for attached in files_from_parts(message.content_parts)
+            if attached.media_type in IMAGE_MEDIA_TYPES
+        ]
+        if not file_ids:
+            return {}
+        rows = await self._session.scalars(
+            select(StoredFile).where(StoredFile.id.in_(file_ids))
+        )
+        images: dict[UUID, ChatImage] = {}
+        for stored in rows:
+            data = read_image_bytes(self._settings, stored)
+            if data is not None:
+                images[stored.id] = ChatImage(mime_type=stored.media_type, data=data)
+        return images
+
+
+def _with_attachments(
+    message: Message,
+    excerpts: dict[UUID, str],
+    images: dict[UUID, ChatImage],
+) -> tuple[str, list[ChatImage]]:
+    content = _with_attached_text(message, excerpts)
+    attached: list[ChatImage] = []
+    missing: list[str] = []
+    for item in files_from_parts(message.content_parts):
+        if item.media_type not in IMAGE_MEDIA_TYPES:
+            continue
+        image = images.get(item.id)
+        if image is None:
+            missing.append(f"[Attached image {item.name} could not be read.]")
+        else:
+            attached.append(image)
+    if missing:
+        content = "\n\n".join([content, *missing])
+    return content, attached
 
 
 def _with_attached_text(message: Message, excerpts: dict[UUID, str]) -> str:

@@ -10,6 +10,14 @@ from app.core.errors import AppError
 from app.db.models.stored_file import StoredFile
 from app.db.models.user import User
 
+IMAGE_MEDIA_TYPES = frozenset(
+    {
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+    }
+)
 TEXT_MEDIA_TYPES = frozenset(
     {
         "text/plain",
@@ -48,6 +56,20 @@ def read_text_excerpt(settings: Settings, stored: StoredFile) -> str | None:
     if len(text) > limit:
         return text[:limit].rstrip() + "\n[truncated]"
     return text
+
+
+def read_image_bytes(settings: Settings, stored: StoredFile) -> bytes | None:
+    """Return image bytes for a supported image. Other types stay unread."""
+    if stored.media_type not in IMAGE_MEDIA_TYPES:
+        return None
+    path = (settings.upload_dir / str(stored.user_id) / stored.storage_name).resolve()
+    root = settings.upload_dir.resolve()
+    if root not in path.parents or not path.is_file():
+        return None
+    data = path.read_bytes()
+    if not data:
+        return None
+    return data
 
 
 def display_name(raw_name: str | None) -> tuple[str, str]:

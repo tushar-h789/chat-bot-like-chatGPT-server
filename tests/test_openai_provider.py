@@ -15,7 +15,7 @@ from pydantic import SecretStr
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.services.ai.openai_provider import OpenAIProvider
-from app.services.ai.provider import ChatTurn, StreamItem, TokenUsage
+from app.services.ai.provider import ChatImage, ChatTurn, StreamItem, TokenUsage
 
 
 def _settings(**overrides: object) -> Settings:
@@ -95,6 +95,37 @@ async def test_complete_builds_a_responses_request() -> None:
         "output_tokens": 6,
         "total_tokens": 10,
     }
+
+
+@pytest.mark.asyncio
+async def test_complete_sends_an_image_as_a_data_url() -> None:
+    responses = _Responses(_completion())
+    provider = OpenAIProvider(_settings(), client=_Client(responses))
+
+    await provider.complete(
+        [
+            ChatTurn(
+                role="user",
+                content="What color is this?",
+                images=[ChatImage(mime_type="image/png", data=b"hi")],
+            )
+        ]
+    )
+
+    assert responses.kwargs is not None
+    assert responses.kwargs["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "What color is this?"},
+                {
+                    "type": "input_image",
+                    "detail": "auto",
+                    "image_url": "data:image/png;base64,aGk=",
+                },
+            ],
+        }
+    ]
 
 
 class _SdkStream:

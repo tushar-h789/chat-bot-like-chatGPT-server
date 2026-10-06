@@ -9,7 +9,7 @@ from pydantic import SecretStr
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.services.ai.gemini_provider import GeminiProvider, gemini_request
-from app.services.ai.provider import ChatTurn, StreamItem, TokenUsage
+from app.services.ai.provider import ChatImage, ChatTurn, StreamItem, TokenUsage
 
 
 def _settings(**overrides: object) -> Settings:
@@ -85,6 +85,23 @@ def test_gemini_request_maps_roles_and_keeps_one_system_instruction() -> None:
             "type": "user_input",
             "content": [{"type": "text", "text": "What about Server Components?"}],
         },
+    ]
+
+
+def test_gemini_request_includes_image_bytes() -> None:
+    steps, _instruction = gemini_request(
+        [
+            ChatTurn(
+                role="user",
+                content="What color is this?",
+                images=[ChatImage(mime_type="image/png", data=b"hi")],
+            )
+        ]
+    )
+
+    assert steps[0]["content"] == [
+        {"type": "text", "text": "What color is this?"},
+        {"type": "image", "mime_type": "image/png", "data": "aGk="},
     ]
 
 

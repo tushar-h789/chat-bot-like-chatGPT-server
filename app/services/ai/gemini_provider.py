@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 from collections.abc import AsyncIterator
 from typing import Protocol
@@ -55,12 +56,16 @@ def gemini_request(turns: list[ChatTurn]) -> tuple[list[dict[str, object]], str 
             system_parts.append(turn.content.strip())
             continue
         step_type = "user_input" if turn.role == "user" else "model_output"
-        steps.append(
-            {
-                "type": step_type,
-                "content": [{"type": "text", "text": turn.content}],
-            }
-        )
+        content: list[dict[str, object]] = [{"type": "text", "text": turn.content}]
+        for image in turn.images:
+            content.append(
+                {
+                    "type": "image",
+                    "mime_type": image.mime_type,
+                    "data": base64.b64encode(image.data).decode("ascii"),
+                }
+            )
+        steps.append({"type": step_type, "content": content})
     if not steps:
         raise AppError(
             code="validation_error",

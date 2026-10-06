@@ -1,3 +1,4 @@
+import base64
 import logging
 from collections.abc import AsyncIterator
 from typing import Protocol
@@ -84,8 +85,24 @@ def _require_text(turns: list[ChatTurn]) -> None:
         )
 
 
-def _input(turns: list[ChatTurn]) -> list[dict[str, str]]:
-    return [{"role": turn.role, "content": turn.content} for turn in turns]
+def _input(turns: list[ChatTurn]) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for turn in turns:
+        if not turn.images:
+            items.append({"role": turn.role, "content": turn.content})
+            continue
+        content: list[dict[str, str]] = [{"type": "input_text", "text": turn.content}]
+        for image in turn.images:
+            encoded = base64.b64encode(image.data).decode("ascii")
+            content.append(
+                {
+                    "type": "input_image",
+                    "detail": "auto",
+                    "image_url": f"data:{image.mime_type};base64,{encoded}",
+                }
+            )
+        items.append({"role": turn.role, "content": content})
+    return items
 
 
 def _raise_for_response_error(error: object | None) -> None:

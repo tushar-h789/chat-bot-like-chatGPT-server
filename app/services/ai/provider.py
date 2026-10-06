@@ -6,9 +6,15 @@ from pydantic import BaseModel
 ChatRole = Literal["user", "assistant", "system"]
 
 
+class ChatImage(BaseModel):
+    mime_type: str
+    data: bytes
+
+
 class ChatTurn(BaseModel):
     role: ChatRole
     content: str
+    images: list[ChatImage] = []
 
 
 class TokenUsage(BaseModel):

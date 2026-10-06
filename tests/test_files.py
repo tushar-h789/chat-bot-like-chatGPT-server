@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
 from app.main import create_app
-from app.services.ai.provider import ChatTurn, StreamItem
+from app.services.ai.provider import ChatImage, ChatTurn, StreamItem
 from tests.test_auth import _csrf, _register
 from tests.test_chat_stream import FakeProvider, _postgres_dsn
 
@@ -188,7 +188,7 @@ def test_chat_sends_text_file_contents_to_the_model(
     assert "hello file" not in response.text
 
 
-def test_chat_does_not_send_image_bytes(
+def test_chat_sends_image_bytes_to_the_model(
     emails: tuple[str, str],
     tmp_path: Path,
 ) -> None:
@@ -213,4 +213,8 @@ def test_chat_does_not_send_image_bytes(
         )
 
     assert response.status_code == 200
-    assert provider.turns == [ChatTurn(role="user", content="See the picture")]
+    assert provider.turns is not None
+    assert provider.turns[0].content == "See the picture"
+    assert provider.turns[0].images == [
+        ChatImage(mime_type="image/png", data=b"png-bytes")
+    ]
