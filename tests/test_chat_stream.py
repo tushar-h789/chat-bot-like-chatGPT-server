@@ -112,6 +112,7 @@ def test_chat_stream_saves_the_reply(email: str) -> None:
             json={"content": "Hi there"},
             headers={"X-CSRF-Token": _csrf(client)},
         )
+        usage_response = client.get("/api/v1/usage")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
@@ -133,6 +134,10 @@ def test_chat_stream_saves_the_reply(email: str) -> None:
     if isinstance(metadata, str):
         metadata = json.loads(metadata)
     assert metadata["usage"]["total_tokens"] == 5
+    assert usage_response.status_code == 200
+    assert usage_response.json()["total_tokens"] == 5
+    assert usage_response.json()["replies"] == 1
+    assert usage_response.json()["cost_usd"] is None
 
 
 class _GeminiCall:

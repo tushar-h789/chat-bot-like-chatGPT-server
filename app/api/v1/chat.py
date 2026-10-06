@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.dependencies import get_current_user, require_csrf
+from app.api.dependencies import get_current_user, limit_chat, require_csrf
 from app.core.errors import AppError
 from app.db.models.user import User
 from app.schemas.chat import ChatRequest
@@ -53,6 +53,7 @@ async def chat(
     request: Request,
     user: User = Depends(get_current_user),
     _: None = Depends(require_csrf),
+    __: None = Depends(limit_chat),
 ) -> StreamingResponse:
     user_id = user.id
     session_factory = request.app.state.session_factory
@@ -108,12 +109,20 @@ async def chat(
             with contextlib.suppress(RuntimeError):
                 await iterator.aclose()
             async with session_factory() as session:
+                settings = request.app.state.settings
+                model = (
+                    settings.gemini_model
+                    if settings.ai_provider == "gemini"
+                    else settings.openai_model
+                )
                 await ChatService(session).finish(
                     prepared.assistant_message_id,
                     prepared.conversation_id,
                     "".join(parts),
                     status,
                     usage,
+                    provider=settings.ai_provider,
+                    model=model.strip() or "unconfigured",
                 )
         if error is not None:
             yield _sse("error", {"code": error.code, "message": error.message})

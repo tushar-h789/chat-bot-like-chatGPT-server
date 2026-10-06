@@ -9,6 +9,8 @@ from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
+from app.core.middleware import AccessLogMiddleware, BodyLimitMiddleware, SecurityHeadersMiddleware
+from app.core.rate_limit import RateLimiter
 from app.db.session import create_engine_and_factory
 from app.services.ai import build_provider
 from app.services.ai.provider import AIProvider
@@ -40,12 +42,19 @@ def create_app(
 
     app = FastAPI(title="AI Chatbot API", version="0.1.0", lifespan=lifespan)
     app.state.settings = resolved_settings
+    app.state.rate_limiter = RateLimiter()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origin_list,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Accept", "X-CSRF-Token"],
+    )
+    app.add_middleware(AccessLogMiddleware)
+    app.add_middleware(BodyLimitMiddleware, max_bytes=resolved_settings.max_body_bytes)
+    app.add_middleware(
+        SecurityHeadersMiddleware,
+        environment=resolved_settings.environment,
     )
     register_exception_handlers(app)
     app.include_router(api_router, prefix="/api/v1")

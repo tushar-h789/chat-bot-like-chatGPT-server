@@ -17,6 +17,12 @@ class HealthResponse(BaseModel):
     status: str
 
 
+@router.get("/health/live", response_model=HealthResponse)
+async def live() -> HealthResponse:
+    """Process is up. It does not check PostgreSQL."""
+    return HealthResponse(status="ok")
+
+
 @router.get("/health", response_model=HealthResponse)
 async def health(db: AsyncSession = Depends(get_db)) -> HealthResponse:
     try:

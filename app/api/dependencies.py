@@ -15,6 +15,14 @@ async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
         yield session
 
 
+async def limit_auth(request: Request) -> None:
+    host = request.client.host if request.client else "unknown"
+    request.app.state.rate_limiter.check(
+        f"auth:{host}",
+        request.app.state.settings.rate_limit_auth_per_minute,
+    )
+
+
 async def require_csrf(request: Request) -> None:
     cookie = request.cookies.get(CSRF_COOKIE, "")
     header = request.headers.get("x-csrf-token", "")
@@ -38,3 +46,13 @@ async def get_current_user(
             status_code=401,
         )
     return await AuthService(db).authenticate(raw_token)
+
+
+async def limit_chat(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> None:
+    request.app.state.rate_limiter.check(
+        f"chat:{user.id}",
+        request.app.state.settings.rate_limit_chat_per_minute,
+    )

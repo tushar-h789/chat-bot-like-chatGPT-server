@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import utcnow
 from app.db.models.conversation import Conversation
 from app.db.models.message import Message
+from app.db.models.usage_event import UsageEvent
 from app.repositories.conversations import ConversationRepository
 from app.repositories.messages import MessageRepository
 from app.schemas.conversations import DEFAULT_TITLE, TITLE_MAX_LENGTH
@@ -99,6 +100,9 @@ class ChatService:
         content: str,
         status: str,
         usage: TokenUsage | None,
+        *,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> None:
         assistant = await self._session.get(Message, assistant_message_id)
         conversation = await self._session.get(Conversation, conversation_id)
@@ -108,5 +112,17 @@ class ChatService:
         assistant.status = status
         if usage is not None:
             assistant.metadata_ = {"usage": usage.model_dump()}
+            if provider and model:
+                self._session.add(
+                    UsageEvent(
+                        user_id=conversation.user_id,
+                        message_id=assistant.id,
+                        provider=provider,
+                        model=model[:100],
+                        input_tokens=usage.input_tokens,
+                        output_tokens=usage.output_tokens,
+                        total_tokens=usage.total_tokens,
+                    )
+                )
         conversation.updated_at = utcnow()
         await self._session.commit()

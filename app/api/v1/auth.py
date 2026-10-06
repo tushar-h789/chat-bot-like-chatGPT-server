@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import get_current_user, get_db, require_csrf
+from app.api.dependencies import get_current_user, get_db, limit_auth, require_csrf
 from app.core.config import Settings
 from app.core.security import (
     CSRF_COOKIE,
@@ -34,7 +34,8 @@ async def register(
     credentials: Credentials,
     request: Request,
     response: Response,
-    _: None = Depends(require_csrf),
+    _: None = Depends(limit_auth),
+    __: None = Depends(require_csrf),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     user, token = await AuthService(db).register(credentials.email, credentials.password)
@@ -47,7 +48,8 @@ async def login(
     credentials: Credentials,
     request: Request,
     response: Response,
-    _: None = Depends(require_csrf),
+    _: None = Depends(limit_auth),
+    __: None = Depends(require_csrf),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     user, token = await AuthService(db).login(credentials.email, credentials.password)
