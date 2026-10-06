@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     upload_dir: Path = BACKEND_ROOT / "var" / "uploads"
     rate_limit_auth_per_minute: int = Field(default=20, ge=0, le=10_000)
     rate_limit_chat_per_minute: int = Field(default=30, ge=0, le=10_000)
+    usage_limit_tokens_per_day: int = Field(default=100_000, ge=0, le=100_000_000)
     gemini_input_usd_per_million: float | None = None
     gemini_output_usd_per_million: float | None = None
     openai_input_usd_per_million: float | None = None

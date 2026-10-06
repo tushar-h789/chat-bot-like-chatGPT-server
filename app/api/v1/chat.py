@@ -12,8 +12,9 @@ from app.api.dependencies import get_current_user, limit_chat, require_csrf
 from app.core.errors import AppError
 from app.db.models.user import User
 from app.schemas.chat import ChatRequest, RegenerateRequest
-from app.services.ai.provider import AIProvider, StreamItem, TokenUsage
+from app.services.ai.provider import AIProvider, StreamItem, TokenUsage, ToolCall
 from app.services.chat import ChatService, PreparedChat
+from app.services.usage import UsageService
 
 router = APIRouter(tags=["chat"])
 logger = logging.getLogger(__name__)
@@ -60,6 +61,7 @@ def _stream(
             {"id": str(prepared.conversation_id), "title": prepared.title},
         )
         parts: list[str] = []
+        tool_calls: list[ToolCall] = []
         status = "complete"
         usage: TokenUsage | None = None
         error: AppError | None = None
@@ -86,7 +88,10 @@ def _stream(
                     break
                 if item == "finished":
                     break
-                if item.type == "delta" and item.text:
+                if item.type == "tool" and item.tool is not None:
+                    tool_calls.append(item.tool)
+                    yield _sse("tool", item.tool.model_dump())
+                elif item.type == "delta" and item.text:
                     parts.append(item.text)
                     yield _sse("delta", {"text": item.text})
                 elif item.type == "end":
@@ -111,6 +116,7 @@ def _stream(
                     usage,
                     provider=settings.ai_provider,
                     model=model.strip() or "unconfigured",
+                    tool_calls=tool_calls,
                 )
         if error is not None:
             yield _sse("error", {"code": error.code, "message": error.message})
@@ -141,8 +147,10 @@ async def chat(
     _: None = Depends(require_csrf),
     __: None = Depends(limit_chat),
 ) -> StreamingResponse:
+    settings = request.app.state.settings
     async with request.app.state.session_factory() as session:
-        prepared = await ChatService(session, request.app.state.settings).prepare(
+        await UsageService(session, settings).enforce_daily(user.id)
+        prepared = await ChatService(session, settings).prepare(
             user.id,
             body.conversation_id,
             body.content,
@@ -160,8 +168,10 @@ async def regenerate(
     _: None = Depends(require_csrf),
     __: None = Depends(limit_chat),
 ) -> StreamingResponse:
+    settings = request.app.state.settings
     async with request.app.state.session_factory() as session:
-        prepared = await ChatService(session, request.app.state.settings).prepare_regenerate(
+        await UsageService(session, settings).enforce_daily(user.id)
+        prepared = await ChatService(session, settings).prepare_regenerate(
             user.id,
             body.conversation_id,
             body.message_id,

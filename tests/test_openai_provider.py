@@ -15,7 +15,8 @@ from pydantic import SecretStr
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.services.ai.openai_provider import OpenAIProvider
-from app.services.ai.provider import ChatImage, ChatTurn, StreamItem, TokenUsage
+from app.services.ai.provider import ChatDocument, ChatImage, ChatTurn, StreamItem, TokenUsage
+from app.services.ai.tools import openai_tools
 
 
 def _settings(**overrides: object) -> Settings:
@@ -84,6 +85,7 @@ async def test_complete_builds_a_responses_request() -> None:
         ],
         "store": False,
         "timeout": 12,
+        "tools": openai_tools(),
     }
     assert "unit-test-key" not in str(responses.kwargs)
     assert result.response_id == "resp_test"
@@ -129,6 +131,39 @@ async def test_complete_sends_an_image_as_a_data_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_complete_sends_a_pdf_as_a_data_url() -> None:
+    responses = _Responses(_completion())
+    provider = OpenAIProvider(_settings(), client=_Client(responses))
+
+    await provider.complete(
+        [
+            ChatTurn(
+                role="user",
+                content="What is in this PDF?",
+                documents=[
+                    ChatDocument(name="notes.pdf", mime_type="application/pdf", data=b"hi")
+                ],
+            )
+        ]
+    )
+
+    assert responses.kwargs is not None
+    assert responses.kwargs["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "What is in this PDF?"},
+                {
+                    "type": "input_file",
+                    "filename": "notes.pdf",
+                    "file_data": "data:application/pdf;base64,aGk=",
+                },
+            ],
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_complete_adds_web_search_only_when_requested() -> None:
     responses = _Responses(_completion())
     provider = OpenAIProvider(_settings(), client=_Client(responses))
@@ -138,7 +173,7 @@ async def test_complete_adds_web_search_only_when_requested() -> None:
     )
 
     assert responses.kwargs is not None
-    assert responses.kwargs["tools"] == [{"type": "web_search"}]
+    assert responses.kwargs["tools"] == openai_tools(web_search=True)
     assert "web_search" not in str(responses.kwargs["input"])
 
 
@@ -319,3 +354,69 @@ async def test_response_error_uses_the_code_only() -> None:
 
     assert caught.value.code == "openai_error"
     assert "secret prompt text" not in caught.value.message
+
+
+@pytest.mark.asyncio
+async def test_stream_runs_a_function_then_continues() -> None:
+    call = SimpleNamespace(
+        type="function_call",
+        call_id="call-1",
+        name="calculate",
+        arguments='{"expression":"2+2"}',
+    )
+    first = _SdkStream(
+        [
+            SimpleNamespace(type="response.output_item.done", item=call),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(usage=None, output=[call]),
+            ),
+        ]
+    )
+    second = _SdkStream(
+        [
+            SimpleNamespace(type="response.output_text.delta", delta="4"),
+            SimpleNamespace(
+                type="response.completed",
+                response=SimpleNamespace(
+                    usage=SimpleNamespace(input_tokens=1, output_tokens=2, total_tokens=3),
+                    output=[],
+                ),
+            ),
+        ]
+    )
+    streams = [first, second]
+
+    class _StreamingResponses:
+        def __init__(self) -> None:
+            self.payloads: list[dict[str, object]] = []
+
+        async def create(self, **kwargs: object) -> object:
+            self.payloads.append(kwargs)
+            return streams[len(self.payloads) - 1]
+
+    responses = _StreamingResponses()
+    provider = OpenAIProvider(_settings(), client=_Client(responses))  # type: ignore[arg-type]
+
+    items = [
+        item
+        async for item in provider.stream([ChatTurn(role="user", content="What is 2+2?")])
+    ]
+
+    assert items[0].type == "tool"
+    assert items[0].tool is not None
+    assert items[0].tool.result == "4"
+    assert items[1] == StreamItem(type="delta", text="4")
+    assert items[2] == StreamItem(
+        type="end",
+        status="complete",
+        usage=TokenUsage(input_tokens=1, output_tokens=2, total_tokens=3),
+    )
+    follow = responses.payloads[1]["input"]
+    assert isinstance(follow, list)
+    assert follow[-2]["type"] == "function_call"
+    assert follow[-1] == {
+        "type": "function_call_output",
+        "call_id": "call-1",
+        "output": "4",
+    }

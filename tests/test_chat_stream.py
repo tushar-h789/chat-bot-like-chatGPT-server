@@ -15,7 +15,7 @@ from app.core.config import Settings, get_settings
 from app.core.errors import AppError
 from app.main import create_app
 from app.services.ai.gemini_provider import GeminiProvider
-from app.services.ai.provider import ChatTurn, StreamItem, TokenUsage
+from app.services.ai.provider import ChatTurn, StreamItem, TokenUsage, ToolCall
 from tests.test_auth import _csrf, _register
 
 
@@ -190,6 +190,45 @@ def _completed(usage: SimpleNamespace | None = None) -> SimpleNamespace:
         event_type="interaction.completed",
         interaction=SimpleNamespace(status="completed", usage=usage),
     )
+
+
+def test_chat_stream_saves_a_tool_call(email: str) -> None:
+    provider = FakeProvider(
+        [
+            StreamItem(
+                type="tool",
+                tool=ToolCall(
+                    name="calculate",
+                    arguments={"expression": "2+2"},
+                    result="4",
+                ),
+            ),
+            StreamItem(type="delta", text="4"),
+            StreamItem(type="end", status="complete"),
+        ]
+    )
+    with TestClient(create_app(ai_provider=provider)) as client:
+        _register(client, email)
+        response = client.post(
+            "/api/v1/chat",
+            json={"content": "What is 2+2?"},
+            headers={"X-CSRF-Token": _csrf(client)},
+        )
+        conversation_id = json.loads(_events(response.text)[0][1])["id"]
+        listed = client.get(f"/api/v1/conversations/{conversation_id}/messages")
+
+    events = _events(response.text)
+    assert [name for name, _data in events] == ["conversation", "tool", "delta", "done"]
+    assert json.loads(events[1][1]) == {
+        "name": "calculate",
+        "arguments": {"expression": "2+2"},
+        "result": "4",
+    }
+    assistant = listed.json()[1]
+    assert assistant["tool_calls"] == [
+        {"name": "calculate", "arguments": {"expression": "2+2"}, "result": "4"}
+    ]
+    assert listed.json()[0]["tool_calls"] == []
 
 
 def test_gemini_stream_uses_the_existing_sse_events(email: str) -> None:

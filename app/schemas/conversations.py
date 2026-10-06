@@ -67,8 +67,35 @@ class AttachedFile(BaseModel):
     size_bytes: int
 
 
+class ToolCallResponse(BaseModel):
+    name: str
+    arguments: dict[str, object] = {}
+    result: str
+
+
 def _used_web_search(metadata: object) -> bool:
     return isinstance(metadata, dict) and metadata.get("web_search") is True
+
+
+def tool_calls_from_metadata(metadata: object) -> list[ToolCallResponse]:
+    if not isinstance(metadata, dict):
+        return []
+    raw = metadata.get("tool_calls")
+    if not isinstance(raw, list):
+        return []
+    calls: list[ToolCallResponse] = []
+    for item in raw:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            continue
+        arguments = item.get("arguments")
+        calls.append(
+            ToolCallResponse(
+                name=item["name"],
+                arguments=arguments if isinstance(arguments, dict) else {},
+                result=str(item.get("result", "")),
+            )
+        )
+    return calls
 
 
 def files_from_parts(parts: object) -> list[AttachedFile]:
@@ -104,6 +131,7 @@ class MessageResponse(BaseModel):
     updated_at: datetime
     files: list[AttachedFile] = []
     web_search: bool = False
+    tool_calls: list[ToolCallResponse] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -122,4 +150,5 @@ class MessageResponse(BaseModel):
             "updated_at": value.updated_at,
             "files": files_from_parts(getattr(value, "content_parts", None)),
             "web_search": _used_web_search(getattr(value, "metadata_", None)),
+            "tool_calls": tool_calls_from_metadata(getattr(value, "metadata_", None)),
         }

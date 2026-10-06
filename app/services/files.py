@@ -26,6 +26,7 @@ TEXT_MEDIA_TYPES = frozenset(
         "application/json",
     }
 )
+PDF_MEDIA_TYPES = frozenset({"application/pdf"})
 ALLOWED_TYPES = {
     ".txt": "text/plain",
     ".md": "text/markdown",
@@ -58,10 +59,21 @@ def read_text_excerpt(settings: Settings, stored: StoredFile) -> str | None:
     return text
 
 
+def read_pdf_bytes(settings: Settings, stored: StoredFile) -> bytes | None:
+    """Return PDF bytes for a PDF. Other types stay unread."""
+    if stored.media_type not in PDF_MEDIA_TYPES:
+        return None
+    return _read_stored_bytes(settings, stored)
+
+
 def read_image_bytes(settings: Settings, stored: StoredFile) -> bytes | None:
     """Return image bytes for a supported image. Other types stay unread."""
     if stored.media_type not in IMAGE_MEDIA_TYPES:
         return None
+    return _read_stored_bytes(settings, stored)
+
+
+def _read_stored_bytes(settings: Settings, stored: StoredFile) -> bytes | None:
     path = (settings.upload_dir / str(stored.user_id) / stored.storage_name).resolve()
     root = settings.upload_dir.resolve()
     if root not in path.parents or not path.is_file():

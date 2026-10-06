@@ -15,11 +15,13 @@ from app.db.models.usage_event import UsageEvent
 from app.repositories.conversations import ConversationRepository
 from app.repositories.messages import MessageRepository
 from app.schemas.conversations import DEFAULT_TITLE, TITLE_MAX_LENGTH, files_from_parts
-from app.services.ai.provider import ChatImage, ChatTurn, TokenUsage
+from app.services.ai.provider import ChatDocument, ChatImage, ChatTurn, TokenUsage, ToolCall
 from app.services.files import (
     IMAGE_MEDIA_TYPES,
+    PDF_MEDIA_TYPES,
     TEXT_MEDIA_TYPES,
     read_image_bytes,
+    read_pdf_bytes,
     read_text_excerpt,
 )
 from app.services.conversations import _not_found
@@ -169,6 +171,7 @@ class ChatService:
         *,
         provider: str | None = None,
         model: str | None = None,
+        tool_calls: list[ToolCall] | None = None,
     ) -> None:
         assistant = await self._session.get(Message, assistant_message_id)
         conversation = await self._session.get(Conversation, conversation_id)
@@ -176,20 +179,25 @@ class ChatService:
             return
         assistant.content = content
         assistant.status = status
+        metadata: dict[str, object] = {}
+        if tool_calls:
+            metadata["tool_calls"] = [call.model_dump() for call in tool_calls]
         if usage is not None:
-            assistant.metadata_ = {"usage": usage.model_dump()}
-            if provider and model:
-                self._session.add(
-                    UsageEvent(
-                        user_id=conversation.user_id,
-                        message_id=assistant.id,
-                        provider=provider,
-                        model=model[:100],
-                        input_tokens=usage.input_tokens,
-                        output_tokens=usage.output_tokens,
-                        total_tokens=usage.total_tokens,
-                    )
+            metadata["usage"] = usage.model_dump()
+        if metadata:
+            assistant.metadata_ = metadata
+        if usage is not None and provider and model:
+            self._session.add(
+                UsageEvent(
+                    user_id=conversation.user_id,
+                    message_id=assistant.id,
+                    provider=provider,
+                    model=model[:100],
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    total_tokens=usage.total_tokens,
                 )
+            )
         conversation.updated_at = utcnow()
         await self._session.commit()
 
@@ -222,17 +230,19 @@ class ChatService:
     ) -> list[ChatTurn]:
         excerpts = await self._text_excerpts(messages)
         images = await self._message_images(messages)
+        documents = await self._message_documents(messages)
         turns: list[ChatTurn] = []
         for message in messages:
             if message.role not in {"user", "assistant", "system"}:
                 continue
-            content, attached = _with_attachments(message, excerpts, images)
+            content, attached, pdfs = _with_attachments(message, excerpts, images, documents)
             if content.strip():
                 turns.append(
                     ChatTurn(
                         role=message.role,  # type: ignore[arg-type]
                         content=content,
                         images=attached,
+                        documents=pdfs,
                     )
                 )
         if web_search and turns:
@@ -281,6 +291,31 @@ class ChatService:
                 images[stored.id] = ChatImage(mime_type=stored.media_type, data=data)
         return images
 
+    async def _message_documents(self, messages: list[Message]) -> dict[UUID, ChatDocument]:
+        if self._settings is None:
+            return {}
+        file_ids = [
+            attached.id
+            for message in messages
+            for attached in files_from_parts(message.content_parts)
+            if attached.media_type in PDF_MEDIA_TYPES
+        ]
+        if not file_ids:
+            return {}
+        rows = await self._session.scalars(
+            select(StoredFile).where(StoredFile.id.in_(file_ids))
+        )
+        documents: dict[UUID, ChatDocument] = {}
+        for stored in rows:
+            data = read_pdf_bytes(self._settings, stored)
+            if data is not None:
+                documents[stored.id] = ChatDocument(
+                    name=stored.original_name,
+                    mime_type=stored.media_type,
+                    data=data,
+                )
+        return documents
+
 
 def _used_search(messages: list[Message]) -> bool:
     for message in reversed(messages):
@@ -295,21 +330,28 @@ def _with_attachments(
     message: Message,
     excerpts: dict[UUID, str],
     images: dict[UUID, ChatImage],
-) -> tuple[str, list[ChatImage]]:
+    documents: dict[UUID, ChatDocument],
+) -> tuple[str, list[ChatImage], list[ChatDocument]]:
     content = _with_attached_text(message, excerpts)
     attached: list[ChatImage] = []
+    pdfs: list[ChatDocument] = []
     missing: list[str] = []
     for item in files_from_parts(message.content_parts):
-        if item.media_type not in IMAGE_MEDIA_TYPES:
-            continue
-        image = images.get(item.id)
-        if image is None:
-            missing.append(f"[Attached image {item.name} could not be read.]")
-        else:
-            attached.append(image)
+        if item.media_type in IMAGE_MEDIA_TYPES:
+            image = images.get(item.id)
+            if image is None:
+                missing.append(f"[Attached image {item.name} could not be read.]")
+            else:
+                attached.append(image)
+        elif item.media_type in PDF_MEDIA_TYPES:
+            document = documents.get(item.id)
+            if document is None:
+                missing.append(f"[Attached PDF {item.name} could not be read.]")
+            else:
+                pdfs.append(document)
     if missing:
         content = "\n\n".join([content, *missing])
-    return content, attached
+    return content, attached, pdfs
 
 
 def _with_attached_text(message: Message, excerpts: dict[UUID, str]) -> str:

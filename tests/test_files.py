@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.core.config import get_settings
 from app.main import create_app
-from app.services.ai.provider import ChatImage, ChatTurn, StreamItem
+from app.services.ai.provider import ChatDocument, ChatImage, ChatTurn, StreamItem
 from tests.test_auth import _csrf, _register
 from tests.test_chat_stream import FakeProvider, _postgres_dsn
 
@@ -218,3 +218,36 @@ def test_chat_sends_image_bytes_to_the_model(
     assert provider.turns[0].images == [
         ChatImage(mime_type="image/png", data=b"png-bytes")
     ]
+
+
+def test_chat_sends_pdf_bytes_to_the_model(
+    emails: tuple[str, str],
+    tmp_path: Path,
+) -> None:
+    provider = FakeProvider(
+        [
+            StreamItem(type="delta", text="ok"),
+            StreamItem(type="end", status="complete", usage=None),
+        ]
+    )
+    with TestClient(_app(tmp_path, provider)) as client:
+        _register(client, emails[0])
+        headers = {"X-CSRF-Token": _csrf(client)}
+        uploaded = client.post(
+            "/api/v1/files",
+            files={"file": ("notes.pdf", b"%PDF-1.4", "application/octet-stream")},
+            headers=headers,
+        )
+        response = client.post(
+            "/api/v1/chat",
+            json={"content": "See the PDF", "file_ids": [uploaded.json()["id"]]},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert provider.turns is not None
+    assert provider.turns[0].content == "See the PDF"
+    assert provider.turns[0].documents == [
+        ChatDocument(name="notes.pdf", mime_type="application/pdf", data=b"%PDF-1.4")
+    ]
+    assert "%PDF-1.4" not in response.text

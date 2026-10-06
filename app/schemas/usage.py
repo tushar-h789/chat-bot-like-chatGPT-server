@@ -7,3 +7,5 @@ class UsageResponse(BaseModel):
     total_tokens: int
     replies: int
     cost_usd: str | None
+    tokens_today: int
+    daily_token_limit: int | None

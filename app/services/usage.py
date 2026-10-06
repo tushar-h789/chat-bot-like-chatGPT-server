@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -5,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.errors import AppError
 from app.db.models.usage_event import UsageEvent
 from app.schemas.usage import UsageResponse
 
@@ -55,13 +57,43 @@ class UsageService:
             cost_usd = f"{cost:.6f}"
         else:
             cost_usd = None
+        limit = self._settings.usage_limit_tokens_per_day
         return UsageResponse(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
             replies=replies,
             cost_usd=cost_usd,
+            tokens_today=await self.tokens_since(user_id, utc_day_start()),
+            daily_token_limit=limit if limit > 0 else None,
         )
+
+    async def enforce_daily(self, user_id: UUID) -> None:
+        """Refuse a new model call once today's finished replies reach the cap."""
+        limit = self._settings.usage_limit_tokens_per_day
+        if limit <= 0:
+            return
+        used = await self.tokens_since(user_id, utc_day_start())
+        if used >= limit:
+            raise AppError(
+                code="usage_limited",
+                message="The daily usage limit has been reached.",
+                status_code=429,
+            )
+
+    async def tokens_since(self, user_id: UUID, start: datetime) -> int:
+        used = await self._session.scalar(
+            select(func.coalesce(func.sum(UsageEvent.total_tokens), 0)).where(
+                UsageEvent.user_id == user_id,
+                UsageEvent.created_at >= start,
+            )
+        )
+        return int(used or 0)
+
+
+def utc_day_start() -> datetime:
+    now = datetime.now(timezone.utc)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 def _provider_cost(

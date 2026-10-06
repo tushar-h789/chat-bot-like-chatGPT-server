@@ -9,7 +9,8 @@ from pydantic import SecretStr
 from app.core.config import Settings
 from app.core.errors import AppError
 from app.services.ai.gemini_provider import GeminiProvider, gemini_request
-from app.services.ai.provider import ChatImage, ChatTurn, StreamItem, TokenUsage
+from app.services.ai.provider import ChatDocument, ChatImage, ChatTurn, StreamItem, TokenUsage
+from app.services.ai.tools import gemini_tools
 
 
 def _settings(**overrides: object) -> Settings:
@@ -24,17 +25,27 @@ def _settings(**overrides: object) -> Settings:
 
 
 class _Interactions:
-    def __init__(self, result: object | None = None, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        result: object | None = None,
+        error: Exception | None = None,
+        results: list[object] | None = None,
+    ) -> None:
         self.result = result
         self.error = error
+        self.results = list(results) if results is not None else None
         self.kwargs: dict[str, object] | None = None
+        self.payloads: list[dict[str, object]] = []
         self.calls = 0
 
     async def create(self, **kwargs: object) -> object:
         self.calls += 1
         self.kwargs = kwargs
+        self.payloads.append(kwargs)
         if self.error is not None:
             raise self.error
+        if self.results is not None:
+            return self.results.pop(0)
         return self.result
 
 
@@ -105,6 +116,25 @@ def test_gemini_request_includes_image_bytes() -> None:
     ]
 
 
+def test_gemini_request_includes_pdf_bytes() -> None:
+    steps, _instruction = gemini_request(
+        [
+            ChatTurn(
+                role="user",
+                content="What is in this PDF?",
+                documents=[
+                    ChatDocument(name="notes.pdf", mime_type="application/pdf", data=b"hi")
+                ],
+            )
+        ]
+    )
+
+    assert steps[0]["content"] == [
+        {"type": "text", "text": "What is in this PDF?"},
+        {"type": "document", "mime_type": "application/pdf", "data": "aGk="},
+    ]
+
+
 @pytest.mark.asyncio
 async def test_web_search_adds_the_google_search_tool() -> None:
     sdk_stream = _SdkStream(
@@ -126,9 +156,7 @@ async def test_web_search_adds_the_google_search_tool() -> None:
     ]
 
     assert interactions.kwargs is not None
-    assert interactions.kwargs["tools"] == [
-        {"type": "google_search", "search_types": ["web_search"]}
-    ]
+    assert interactions.kwargs["tools"] == gemini_tools(web_search=True)
     assert items[-1].type == "end"
 
 
@@ -191,7 +219,7 @@ async def test_stream_maps_text_deltas_and_usage() -> None:
     assert interactions.kwargs["stream"] is True
     assert interactions.kwargs["timeout"] == 12
     assert interactions.kwargs["system_instruction"] == "Be brief."
-    assert "tools" not in interactions.kwargs
+    assert interactions.kwargs["tools"] == gemini_tools()
     assert items == [
         StreamItem(type="delta", text="Hel"),
         StreamItem(type="delta", text="lo"),
@@ -340,6 +368,145 @@ async def test_stream_error_event_hides_the_upstream_message(
     assert "upstream-secret" not in caught.value.message
     assert "upstream-secret" not in caplog.text
     assert sdk_stream.closed is True
+
+
+@pytest.mark.asyncio
+async def test_stream_runs_a_function_then_continues() -> None:
+    first = _SdkStream(
+        [
+            SimpleNamespace(
+                event_type="step.start",
+                index=0,
+                step=SimpleNamespace(type="thought", signature="sig-1"),
+            ),
+            SimpleNamespace(
+                event_type="step.start",
+                index=1,
+                step=SimpleNamespace(
+                    type="function_call",
+                    id="call-1",
+                    name="calculate",
+                    arguments={"expression": "2+2"},
+                ),
+            ),
+            SimpleNamespace(event_type="interaction.status_update", status="requires_action"),
+        ]
+    )
+    second = _SdkStream(
+        [
+            SimpleNamespace(
+                event_type="step.delta",
+                delta=SimpleNamespace(type="text", text="4"),
+            ),
+            SimpleNamespace(
+                event_type="interaction.completed",
+                interaction=SimpleNamespace(status="completed", usage=_usage(), steps=None),
+            ),
+        ]
+    )
+    interactions = _Interactions(results=[first, second])
+    provider = GeminiProvider(_settings(), client=_Client(interactions))  # type: ignore[arg-type]
+
+    items = [
+        item
+        async for item in provider.stream([ChatTurn(role="user", content="What is 2+2?")])
+    ]
+
+    assert items[0].type == "tool"
+    assert items[0].tool is not None
+    assert items[0].tool.result == "4"
+    assert items[1] == StreamItem(type="delta", text="4")
+    assert items[2].type == "end"
+    assert items[2].usage == TokenUsage(input_tokens=4, output_tokens=6, total_tokens=10)
+    follow = interactions.payloads[1]["input"]
+    assert isinstance(follow, list)
+    assert follow[-3] == {"type": "thought", "signature": "sig-1"}
+    assert follow[-2]["type"] == "function_call"
+    assert follow[-1] == {
+        "type": "function_result",
+        "call_id": "call-1",
+        "name": "calculate",
+        "result": [{"type": "text", "text": "4"}],
+    }
+    assert first.closed is True
+    assert second.closed is True
+
+
+@pytest.mark.asyncio
+async def test_stream_joins_streamed_function_arguments() -> None:
+    first = _SdkStream(
+        [
+            SimpleNamespace(
+                event_type="step.start",
+                index=1,
+                step=SimpleNamespace(
+                    type="function_call",
+                    id="call-1",
+                    name="calculate",
+                    arguments={},
+                ),
+            ),
+            SimpleNamespace(
+                event_type="step.delta",
+                index=1,
+                delta=SimpleNamespace(type="arguments_delta", arguments='{"expression":'),
+            ),
+            SimpleNamespace(
+                event_type="step.delta",
+                index=1,
+                delta=SimpleNamespace(type="arguments_delta", arguments='"(17 + 3) * 2"}'),
+            ),
+            SimpleNamespace(event_type="interaction.status_update", status="requires_action"),
+        ]
+    )
+    second = _SdkStream(
+        [
+            SimpleNamespace(
+                event_type="step.delta",
+                delta=SimpleNamespace(type="text", text="40"),
+            ),
+            SimpleNamespace(
+                event_type="interaction.completed",
+                interaction=SimpleNamespace(status="completed", usage=_usage(), steps=None),
+            ),
+        ]
+    )
+    interactions = _Interactions(results=[first, second])
+    provider = GeminiProvider(_settings(), client=_Client(interactions))  # type: ignore[arg-type]
+
+    items = [
+        item
+        async for item in provider.stream([ChatTurn(role="user", content="What is (17 + 3) * 2?")])
+    ]
+
+    assert items[0].type == "tool"
+    assert items[0].tool is not None
+    assert items[0].tool.result == "40"
+    follow = interactions.payloads[1]["input"]
+    assert isinstance(follow, list)
+    assert follow[-2]["arguments"] == {"expression": "(17 + 3) * 2"}
+    assert follow[-1]["result"] == [{"type": "text", "text": "40"}]
+
+
+class _BadRequestError(Exception):
+    pass
+
+
+_BadRequestError.__name__ = "BadRequestError"
+_BadRequestError.__module__ = "google.genai.errors"
+
+
+@pytest.mark.asyncio
+async def test_bad_request_is_not_retried() -> None:
+    interactions = _Interactions(error=_BadRequestError("upstream-secret"))
+    provider = GeminiProvider(_settings(), client=_Client(interactions))  # type: ignore[arg-type]
+
+    with pytest.raises(AppError) as caught:
+        await provider.complete([ChatTurn(role="user", content="Hi")])
+
+    assert caught.value.code == "gemini_error"
+    assert "upstream-secret" not in caught.value.message
+    assert interactions.calls == 1
 
 
 def test_real_client_does_not_retry() -> None:

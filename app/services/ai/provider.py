@@ -11,10 +11,17 @@ class ChatImage(BaseModel):
     data: bytes
 
 
+class ChatDocument(BaseModel):
+    name: str
+    mime_type: str
+    data: bytes
+
+
 class ChatTurn(BaseModel):
     role: ChatRole
     content: str
     images: list[ChatImage] = []
+    documents: list[ChatDocument] = []
     web_search: bool = False
 
 
@@ -31,11 +38,18 @@ class ModelCompletion(BaseModel):
     usage: TokenUsage | None
 
 
+class ToolCall(BaseModel):
+    name: str
+    arguments: dict[str, object] = {}
+    result: str
+
+
 class StreamItem(BaseModel):
-    type: Literal["delta", "end"]
+    type: Literal["delta", "end", "tool"]
     text: str = ""
     status: Literal["complete", "incomplete"] = "complete"
     usage: TokenUsage | None = None
+    tool: ToolCall | None = None
 
 
 class AIProvider(Protocol):
