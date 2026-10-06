@@ -114,6 +114,16 @@ def _map_gemini_exception(exc: Exception) -> AppError | None:
                 502,
             )
         return _provider_error("gemini_error", "The model failed to respond.", 502)
+    if (
+        type(exc).__name__ == "RateLimitError"
+        and type(exc).__module__.startswith("google.genai")
+    ):
+        logger.warning("gemini status error status=429")
+        return _provider_error(
+            "gemini_rate_limited",
+            "The model is busy. Try again shortly.",
+            429,
+        )
     if isinstance(exc, httpx.RequestError):
         return _provider_error(
             "gemini_unavailable",
@@ -200,7 +210,13 @@ class GeminiProvider:
         client = self._client_or_create()
         response = await self._create(
             client,
-            self._request(model, steps, instruction, stream=False),
+            self._request(
+                model,
+                steps,
+                instruction,
+                stream=False,
+                web_search=any(turn.web_search for turn in turns),
+            ),
         )
 
         status = getattr(response, "status", "completed")
@@ -220,7 +236,13 @@ class GeminiProvider:
         client = self._client_or_create()
         sdk_stream = await self._create(
             client,
-            self._request(model, steps, instruction, stream=True),
+            self._request(
+                model,
+                steps,
+                instruction,
+                stream=True,
+                web_search=any(turn.web_search for turn in turns),
+            ),
         )
 
         try:
@@ -266,6 +288,7 @@ class GeminiProvider:
         instruction: str | None,
         *,
         stream: bool,
+        web_search: bool,
     ) -> dict[str, object]:
         payload: dict[str, object] = {
             "model": model,
@@ -276,6 +299,8 @@ class GeminiProvider:
         }
         if instruction is not None:
             payload["system_instruction"] = instruction
+        if web_search:
+            payload["tools"] = [{"type": "google_search", "search_types": ["web_search"]}]
         return payload
 
     async def _create(self, client: _GeminiClient, payload: dict[str, object]) -> object:

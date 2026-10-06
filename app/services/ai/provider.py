@@ -15,6 +15,7 @@ class ChatTurn(BaseModel):
     role: ChatRole
     content: str
     images: list[ChatImage] = []
+    web_search: bool = False
 
 
 class TokenUsage(BaseModel):

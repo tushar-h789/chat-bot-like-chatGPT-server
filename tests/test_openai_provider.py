@@ -128,6 +128,20 @@ async def test_complete_sends_an_image_as_a_data_url() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_complete_adds_web_search_only_when_requested() -> None:
+    responses = _Responses(_completion())
+    provider = OpenAIProvider(_settings(), client=_Client(responses))
+
+    await provider.complete(
+        [ChatTurn(role="user", content="Look this up", web_search=True)]
+    )
+
+    assert responses.kwargs is not None
+    assert responses.kwargs["tools"] == [{"type": "web_search"}]
+    assert "web_search" not in str(responses.kwargs["input"])
+
+
 class _SdkStream:
     def __init__(self, events: list[object]) -> None:
         self._events = events

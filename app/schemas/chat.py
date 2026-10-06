@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     content: str
     conversation_id: UUID | None = None
     file_ids: list[UUID] = []
+    web_search: bool = False
 
     @field_validator("file_ids")
     @classmethod

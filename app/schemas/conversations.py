@@ -67,6 +67,10 @@ class AttachedFile(BaseModel):
     size_bytes: int
 
 
+def _used_web_search(metadata: object) -> bool:
+    return isinstance(metadata, dict) and metadata.get("web_search") is True
+
+
 def files_from_parts(parts: object) -> list[AttachedFile]:
     if not isinstance(parts, list):
         return []
@@ -99,6 +103,7 @@ class MessageResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     files: list[AttachedFile] = []
+    web_search: bool = False
 
     @model_validator(mode="before")
     @classmethod
@@ -116,4 +121,5 @@ class MessageResponse(BaseModel):
             "created_at": value.created_at,
             "updated_at": value.updated_at,
             "files": files_from_parts(getattr(value, "content_parts", None)),
+            "web_search": _used_web_search(getattr(value, "metadata_", None)),
         }

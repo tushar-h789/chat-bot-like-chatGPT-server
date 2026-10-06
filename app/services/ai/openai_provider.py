@@ -85,6 +85,26 @@ def _require_text(turns: list[ChatTurn]) -> None:
         )
 
 
+def _request_kwargs(
+    model: str,
+    turns: list[ChatTurn],
+    *,
+    timeout: float,
+    stream: bool = False,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "model": model,
+        "input": _input(turns),
+        "store": False,
+        "timeout": timeout,
+    }
+    if stream:
+        payload["stream"] = True
+    if any(turn.web_search for turn in turns):
+        payload["tools"] = [{"type": "web_search"}]
+    return payload
+
+
 def _input(turns: list[ChatTurn]) -> list[dict[str, object]]:
     items: list[dict[str, object]] = []
     for turn in turns:
@@ -171,10 +191,11 @@ class OpenAIProvider:
         client = self._client_or_create()
         try:
             response = await client.responses.create(
-                model=model,
-                input=_input(turns),
-                store=False,
-                timeout=self._settings.openai_timeout_seconds,
+                **_request_kwargs(
+                    model,
+                    turns,
+                    timeout=self._settings.openai_timeout_seconds,
+                )
             )
         except Exception as exc:
             mapped = _map_openai_exception(exc)
@@ -196,11 +217,12 @@ class OpenAIProvider:
         client = self._client_or_create()
         try:
             sdk_stream = await client.responses.create(
-                model=model,
-                input=_input(turns),
-                store=False,
-                stream=True,
-                timeout=self._settings.openai_timeout_seconds,
+                **_request_kwargs(
+                    model,
+                    turns,
+                    timeout=self._settings.openai_timeout_seconds,
+                    stream=True,
+                )
             )
         except Exception as exc:
             mapped = _map_openai_exception(exc)

@@ -147,6 +147,7 @@ async def chat(
             body.conversation_id,
             body.content,
             body.file_ids,
+            body.web_search,
         )
     return _stream(prepared, request, request.app.state.ai_provider)
 

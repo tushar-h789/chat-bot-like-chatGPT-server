@@ -53,6 +53,7 @@ class ChatService:
         conversation_id: UUID | None,
         content: str,
         file_ids: list[UUID] | None = None,
+        web_search: bool = False,
     ) -> PreparedChat:
         if conversation_id is None:
             conversation = Conversation(
@@ -80,13 +81,14 @@ class ChatService:
             role="user",
             content=content,
             content_parts=_file_parts(attached) or None,
+            metadata_={"web_search": True} if web_search else None,
             status="complete",
             created_at=started,
             updated_at=started,
         )
         self._messages.add(user_message)
         await self._session.flush()
-        turns = await self._model_turns([*prior, user_message])
+        turns = await self._model_turns([*prior, user_message], web_search=web_search)
         assistant_at = started + timedelta(microseconds=1)
         assistant = Message(
             conversation_id=conversation.id,
@@ -139,7 +141,8 @@ class ChatService:
                 message="Only the latest reply can be regenerated.",
                 status_code=422,
             )
-        turns = await self._model_turns(earlier)
+        search = _used_search(earlier)
+        turns = await self._model_turns(earlier, web_search=search)
         target.content = ""
         target.status = "incomplete"
         target.metadata_ = None
@@ -211,7 +214,12 @@ class ChatService:
             )
         return [found[file_id] for file_id in unique]
 
-    async def _model_turns(self, messages: list[Message]) -> list[ChatTurn]:
+    async def _model_turns(
+        self,
+        messages: list[Message],
+        *,
+        web_search: bool = False,
+    ) -> list[ChatTurn]:
         excerpts = await self._text_excerpts(messages)
         images = await self._message_images(messages)
         turns: list[ChatTurn] = []
@@ -227,6 +235,8 @@ class ChatService:
                         images=attached,
                     )
                 )
+        if web_search and turns:
+            turns[-1] = turns[-1].model_copy(update={"web_search": True})
         return turns
 
     async def _text_excerpts(self, messages: list[Message]) -> dict[UUID, str]:
@@ -270,6 +280,15 @@ class ChatService:
             if data is not None:
                 images[stored.id] = ChatImage(mime_type=stored.media_type, data=data)
         return images
+
+
+def _used_search(messages: list[Message]) -> bool:
+    for message in reversed(messages):
+        if message.role != "user":
+            continue
+        metadata = message.metadata_
+        return isinstance(metadata, dict) and metadata.get("web_search") is True
+    return False
 
 
 def _with_attachments(

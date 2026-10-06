@@ -105,6 +105,33 @@ def test_gemini_request_includes_image_bytes() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_web_search_adds_the_google_search_tool() -> None:
+    sdk_stream = _SdkStream(
+        [
+            SimpleNamespace(
+                event_type="interaction.completed",
+                interaction=SimpleNamespace(status="completed", usage=None),
+            )
+        ]
+    )
+    interactions = _Interactions(sdk_stream)
+    provider = GeminiProvider(_settings(), client=_Client(interactions))  # type: ignore[arg-type]
+
+    items = [
+        item
+        async for item in provider.stream(
+            [ChatTurn(role="user", content="Look this up", web_search=True)]
+        )
+    ]
+
+    assert interactions.kwargs is not None
+    assert interactions.kwargs["tools"] == [
+        {"type": "google_search", "search_types": ["web_search"]}
+    ]
+    assert items[-1].type == "end"
+
+
 def test_gemini_request_omits_system_instruction_when_there_is_none() -> None:
     steps, instruction = gemini_request([ChatTurn(role="user", content="Hi")])
 
@@ -164,6 +191,7 @@ async def test_stream_maps_text_deltas_and_usage() -> None:
     assert interactions.kwargs["stream"] is True
     assert interactions.kwargs["timeout"] == 12
     assert interactions.kwargs["system_instruction"] == "Be brief."
+    assert "tools" not in interactions.kwargs
     assert items == [
         StreamItem(type="delta", text="Hel"),
         StreamItem(type="delta", text="lo"),
@@ -226,6 +254,14 @@ class _NotFound(Exception):
 _NotFound.__module__ = "google.genai.errors"
 
 
+class _RateLimitError(Exception):
+    pass
+
+
+_RateLimitError.__name__ = "RateLimitError"
+_RateLimitError.__module__ = "google.genai.errors"
+
+
 class _InteractionsStatus(Exception):
     """Stand-in for the Interactions client's APIError, which is a different class."""
 
@@ -258,6 +294,7 @@ async def test_timeout_rate_limit_and_auth_map_to_safe_errors(
         (_InteractionsStatus(503), "gemini_unavailable", 502),
         (APITimeoutError("upstream-secret"), "gemini_timeout", 504),
         (_NotFound("upstream-secret"), "gemini_unavailable", 502),
+        (_RateLimitError("upstream-secret"), "gemini_rate_limited", 429),
     ]
 
     with caplog.at_level(logging.WARNING):
