@@ -5,9 +5,22 @@ from pydantic import BaseModel, field_validator
 from app.core.config import get_settings
 
 
+class RegenerateRequest(BaseModel):
+    conversation_id: UUID
+    message_id: UUID
+
+
 class ChatRequest(BaseModel):
     content: str
     conversation_id: UUID | None = None
+    file_ids: list[UUID] = []
+
+    @field_validator("file_ids")
+    @classmethod
+    def limit_files(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) > 4:
+            raise ValueError("A message can include at most 4 files.")
+        return value
 
     @field_validator("content")
     @classmethod

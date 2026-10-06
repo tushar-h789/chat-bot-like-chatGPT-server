@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     gemini_model: str = ""
     gemini_timeout_seconds: float = Field(default=60, gt=0, le=300)
     max_message_chars: int = Field(default=16000, ge=1, le=100_000)
-    max_body_bytes: int = Field(default=1_048_576, ge=1, le=10_000_000)
+    max_body_bytes: int = Field(default=6_291_456, ge=1, le=20_000_000)
+    max_upload_bytes: int = Field(default=5_242_880, ge=1, le=20_000_000)
+    upload_dir: Path = BACKEND_ROOT / "var" / "uploads"
     rate_limit_auth_per_minute: int = Field(default=20, ge=0, le=10_000)
     rate_limit_chat_per_minute: int = Field(default=30, ge=0, le=10_000)
     gemini_input_usd_per_million: float | None = None

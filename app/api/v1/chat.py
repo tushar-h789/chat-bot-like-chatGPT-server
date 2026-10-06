@@ -11,9 +11,9 @@ from fastapi.responses import StreamingResponse
 from app.api.dependencies import get_current_user, limit_chat, require_csrf
 from app.core.errors import AppError
 from app.db.models.user import User
-from app.schemas.chat import ChatRequest
-from app.services.ai.provider import StreamItem, TokenUsage
-from app.services.chat import ChatService
+from app.schemas.chat import ChatRequest, RegenerateRequest
+from app.services.ai.provider import AIProvider, StreamItem, TokenUsage
+from app.services.chat import ChatService, PreparedChat
 
 router = APIRouter(tags=["chat"])
 logger = logging.getLogger(__name__)
@@ -47,24 +47,12 @@ async def _next_item(
         raise
 
 
-@router.post("/chat")
-async def chat(
-    body: ChatRequest,
+def _stream(
+    prepared: PreparedChat,
     request: Request,
-    user: User = Depends(get_current_user),
-    _: None = Depends(require_csrf),
-    __: None = Depends(limit_chat),
+    provider: AIProvider,
 ) -> StreamingResponse:
-    user_id = user.id
     session_factory = request.app.state.session_factory
-    provider = request.app.state.ai_provider
-
-    async with session_factory() as session:
-        prepared = await ChatService(session).prepare(
-            user_id,
-            body.conversation_id,
-            body.content,
-        )
 
     async def events() -> AsyncIterator[str]:
         yield _sse(
@@ -143,3 +131,38 @@ async def chat(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/chat")
+async def chat(
+    body: ChatRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_csrf),
+    __: None = Depends(limit_chat),
+) -> StreamingResponse:
+    async with request.app.state.session_factory() as session:
+        prepared = await ChatService(session, request.app.state.settings).prepare(
+            user.id,
+            body.conversation_id,
+            body.content,
+            body.file_ids,
+        )
+    return _stream(prepared, request, request.app.state.ai_provider)
+
+
+@router.post("/chat/regenerate")
+async def regenerate(
+    body: RegenerateRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    _: None = Depends(require_csrf),
+    __: None = Depends(limit_chat),
+) -> StreamingResponse:
+    async with request.app.state.session_factory() as session:
+        prepared = await ChatService(session, request.app.state.settings).prepare_regenerate(
+            user.id,
+            body.conversation_id,
+            body.message_id,
+        )
+    return _stream(prepared, request, request.app.state.ai_provider)

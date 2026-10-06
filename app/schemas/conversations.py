@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.config import get_settings
 
@@ -60,6 +60,34 @@ class ConversationResponse(BaseModel):
     updated_at: datetime
 
 
+class AttachedFile(BaseModel):
+    id: UUID
+    name: str
+    media_type: str
+    size_bytes: int
+
+
+def files_from_parts(parts: object) -> list[AttachedFile]:
+    if not isinstance(parts, list):
+        return []
+    files: list[AttachedFile] = []
+    for part in parts:
+        if not isinstance(part, dict) or part.get("type") != "file":
+            continue
+        try:
+            files.append(
+                AttachedFile(
+                    id=part["file_id"],
+                    name=str(part["name"]),
+                    media_type=str(part["media_type"]),
+                    size_bytes=int(part["size_bytes"]),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return files
+
+
 class MessageResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -70,3 +98,22 @@ class MessageResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    files: list[AttachedFile] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def include_saved_files(cls, value: object) -> object:
+        if isinstance(value, dict):
+            return value
+        if not hasattr(value, "content"):
+            return value
+        return {
+            "id": value.id,
+            "conversation_id": value.conversation_id,
+            "role": value.role,
+            "content": value.content,
+            "status": value.status,
+            "created_at": value.created_at,
+            "updated_at": value.updated_at,
+            "files": files_from_parts(getattr(value, "content_parts", None)),
+        }

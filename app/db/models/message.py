@@ -14,8 +14,8 @@ MESSAGE_STATUSES = ("complete", "incomplete", "cancelled")
 class Message(Base):
     """Stored chat turn.
 
-    `content` is the text shown in the transcript. `content_parts` and
-    `metadata` stay empty until multimodal content and tool calls exist.
+    `content` is the text shown in the transcript. `content_parts` stores
+    attached files. The model still receives only the text.
     """
 
     __tablename__ = "messages"
