@@ -21,8 +21,13 @@ class Settings(BaseSettings):
     database_url: str
     cors_origins: str = "http://localhost:3000"
     session_secret: SecretStr = SecretStr("")
+    ai_provider: Literal["gemini", "openai"] = "gemini"
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = ""
+    openai_timeout_seconds: float = Field(default=60, gt=0, le=300)
+    gemini_api_key: SecretStr = SecretStr("")
+    gemini_model: str = ""
+    gemini_timeout_seconds: float = Field(default=60, gt=0, le=300)
     max_message_chars: int = Field(default=16000, ge=1, le=100_000)
 
     @computed_field

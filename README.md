@@ -36,7 +36,13 @@ alembic upgrade head
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
-A healthy database returns `{"status":"ok"}`. Auth routes are documented in [../docs/api.md](../docs/api.md). The Bruno collection is `bruno/`.
+A healthy database returns `{"status":"ok"}`. Auth, conversation, and chat stream routes are documented in [../docs/api.md](../docs/api.md). The Bruno collection is `bruno/`. It does not call `POST /api/v1/chat`.
+
+`AI_PROVIDER` is `gemini` or `openai`. The default is `gemini`.
+
+Gemini settings belong in `.env` only: `GEMINI_API_KEY`, `GEMINI_MODEL`, and `GEMINI_TIMEOUT_SECONDS`. Copy them from `.env.example`. The suggested free-tier model is `gemini-3.8-flash`. Get a key from [Google AI Studio](https://aistudio.google.com/apikey). Do not paste the key into chat. `POST /api/v1/chat` uses the provider named by `AI_PROVIDER`.
+
+`OPENAI_API_KEY` and `OPENAI_MODEL` also belong in `.env` only. Tests inject a fake provider and do not call OpenAI or Gemini.
 
 ## Tests
 
