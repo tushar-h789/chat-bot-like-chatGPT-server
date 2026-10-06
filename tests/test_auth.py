@@ -190,6 +190,17 @@ def test_me_and_logout_require_a_session() -> None:
     assert logout.status_code == 401
 
 
+def test_register_without_any_csrf_cookie_is_rejected(email: str) -> None:
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/api/v1/auth/register",
+            json={"email": email, "password": PASSWORD},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "csrf_failed"
+
+
 def test_unsafe_auth_requests_require_csrf(email: str) -> None:
     with TestClient(create_app()) as client:
         client.get("/api/v1/auth/csrf")

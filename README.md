@@ -36,7 +36,7 @@ alembic upgrade head
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
-A healthy database returns `{"status":"ok"}`. Auth routes are documented in [../docs/api.md](../docs/api.md). The Bruno collection is `bruno/ai-chatbot-api`.
+A healthy database returns `{"status":"ok"}`. Auth routes are documented in [../docs/api.md](../docs/api.md). The Bruno collection is `bruno/`.
 
 ## Tests
 

@@ -42,6 +42,8 @@ def hash_token(token: str) -> str:
 
 
 def tokens_match(left: str, right: str) -> bool:
+    if not left or not right:
+        return False
     left_bytes = left.encode("utf-8")
     right_bytes = right.encode("utf-8")
     if len(left_bytes) != len(right_bytes):
