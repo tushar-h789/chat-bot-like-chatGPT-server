@@ -198,6 +198,25 @@ async def test_missing_configuration_does_not_call_gemini() -> None:
     assert interactions.calls == 0
 
 
+class APITimeoutError(Exception):
+    """Same name as the Interactions client's timeout, which is not builtin TimeoutError."""
+
+
+class _NotFound(Exception):
+    """Same module prefix as an unmapped Interactions client error."""
+
+
+_NotFound.__module__ = "google.genai.errors"
+
+
+class _InteractionsStatus(Exception):
+    """Stand-in for the Interactions client's APIError, which is a different class."""
+
+    def __init__(self, code: int) -> None:
+        super().__init__("upstream-secret")
+        self.code = code
+
+
 @pytest.mark.asyncio
 async def test_timeout_rate_limit_and_auth_map_to_safe_errors(
     caplog: logging.LogCaptureFixture,
@@ -219,6 +238,9 @@ async def test_timeout_rate_limit_and_auth_map_to_safe_errors(
             "gemini_unavailable",
             502,
         ),
+        (_InteractionsStatus(503), "gemini_unavailable", 502),
+        (APITimeoutError("upstream-secret"), "gemini_timeout", 504),
+        (_NotFound("upstream-secret"), "gemini_unavailable", 502),
     ]
 
     with caplog.at_level(logging.WARNING):

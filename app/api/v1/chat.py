@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Literal
 
@@ -15,6 +16,7 @@ from app.services.ai.provider import StreamItem, TokenUsage
 from app.services.chat import ChatService
 
 router = APIRouter(tags=["chat"])
+logger = logging.getLogger(__name__)
 
 
 def _sse(event: str, payload: dict[str, object]) -> str:
@@ -79,6 +81,15 @@ async def chat(
                     item = await _next_item(iterator, request)
                 except AppError as exc:
                     error = exc
+                    status = "incomplete"
+                    break
+                except Exception as exc:
+                    logger.warning("chat stream failed error=%s", type(exc).__name__)
+                    error = AppError(
+                        code="model_unavailable",
+                        message="The model could not complete the request.",
+                        status_code=502,
+                    )
                     status = "incomplete"
                     break
                 if item is None:

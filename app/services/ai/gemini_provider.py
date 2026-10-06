@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from typing import Protocol
@@ -70,20 +71,38 @@ def gemini_request(turns: list[ChatTurn]) -> tuple[list[dict[str, object]], str 
     return steps, instruction
 
 
+def _status_code(exc: Exception) -> int | None:
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return code
+    return None
+
+
+def _is_timeout(exc: Exception) -> bool:
+    # The Interactions client raises its own APITimeoutError, not the builtin one.
+    return isinstance(exc, (httpx.TimeoutException, TimeoutError)) or type(exc).__name__ in {
+        "APITimeoutError",
+        "TimeoutException",
+    }
+
+
 def _map_gemini_exception(exc: Exception) -> AppError | None:
-    if isinstance(exc, (httpx.TimeoutException, TimeoutError)):
+    if _is_timeout(exc):
+        logger.warning("gemini timeout error type=%s", type(exc).__name__)
         return _provider_error("gemini_timeout", "The model timed out.", 504)
-    if isinstance(exc, APIError):
-        logger.warning("gemini status error status=%s", exc.code)
-        if exc.code == 429:
+    # The Interactions client raises its own APIError, not google.genai.errors.APIError.
+    status = _status_code(exc)
+    if isinstance(exc, APIError) or status is not None:
+        logger.warning("gemini status error status=%s", status)
+        if status == 429:
             return _provider_error(
                 "gemini_rate_limited",
                 "The model is busy. Try again shortly.",
                 429,
             )
-        if exc.code in {401, 403}:
+        if status in {401, 403}:
             return _not_configured()
-        if 500 <= exc.code < 600:
+        if status is not None and 500 <= status < 600:
             return _provider_error(
                 "gemini_unavailable",
                 "The model could not complete the request.",
@@ -96,7 +115,17 @@ def _map_gemini_exception(exc: Exception) -> AppError | None:
             "The model could not be reached.",
             502,
         )
+    if type(exc).__module__.startswith("google.genai"):
+        logger.warning("gemini client error type=%s", type(exc).__name__)
+        return _provider_error(
+            "gemini_unavailable",
+            "The model could not complete the request.",
+            502,
+        )
     return None
+
+
+_RETRYABLE = {"gemini_timeout", "gemini_unavailable", "gemini_rate_limited"}
 
 
 def _usage_from(usage: object | None) -> TokenUsage | None:
@@ -164,15 +193,10 @@ class GeminiProvider:
         model = self._model()
         steps, instruction = gemini_request(turns)
         client = self._client_or_create()
-        try:
-            response = await client.aio.interactions.create(
-                **self._request(model, steps, instruction, stream=False),
-            )
-        except Exception as exc:
-            mapped = _map_gemini_exception(exc)
-            if mapped is None:
-                raise
-            raise mapped from None
+        response = await self._create(
+            client,
+            self._request(model, steps, instruction, stream=False),
+        )
 
         status = getattr(response, "status", "completed")
         if status == "failed":
@@ -189,15 +213,10 @@ class GeminiProvider:
         model = self._model()
         steps, instruction = gemini_request(turns)
         client = self._client_or_create()
-        try:
-            sdk_stream = await client.aio.interactions.create(
-                **self._request(model, steps, instruction, stream=True),
-            )
-        except Exception as exc:
-            mapped = _map_gemini_exception(exc)
-            if mapped is None:
-                raise
-            raise mapped from None
+        sdk_stream = await self._create(
+            client,
+            self._request(model, steps, instruction, stream=True),
+        )
 
         try:
             async for event in sdk_stream:
@@ -254,11 +273,30 @@ class GeminiProvider:
             payload["system_instruction"] = instruction
         return payload
 
+    async def _create(self, client: _GeminiClient, payload: dict[str, object]) -> object:
+        """One retry covers a short Gemini capacity spike without hiding a real failure."""
+        mapped: AppError | None = None
+        for attempt in (1, 2):
+            try:
+                return await client.aio.interactions.create(**payload)
+            except Exception as exc:
+                mapped = _map_gemini_exception(exc)
+                if mapped is None or mapped.code not in _RETRYABLE or attempt == 2:
+                    if mapped is None:
+                        raise
+                    raise mapped from None
+                await asyncio.sleep(0.4)
+        if mapped is not None:
+            raise mapped
+        raise _provider_error("gemini_error", "The model failed to respond.", 502)
+
     def _client_or_create(self) -> _GeminiClient:
         if self._client is None:
+            timeout_ms = int(self._settings.gemini_timeout_seconds * 1000)
             self._client = genai.Client(
                 api_key=self._settings.gemini_api_key.get_secret_value(),
                 http_options=HttpOptions(
+                    timeout=timeout_ms,
                     retry_options=HttpRetryOptions(attempts=1),
                 ),
             )
