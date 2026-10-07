@@ -4,7 +4,7 @@ FastAPI service for a ChatGPT-style chat. The browser talks only to this API. Th
 
 `AI_PROVIDER` is `gemini` or `openai`. The default is `gemini`. The suggested model is `gemini-3.5-flash-lite`.
 
-The rules this service enforces are in [Business rules](#business-rules). The same rules are written in [docs/business-logic.md](docs/business-logic.md). The HTTP shapes are in [docs/api.md](docs/api.md).
+The product overview is in [docs/overview.md](docs/overview.md). The rules this service enforces are in [Business rules](#business-rules). The same rules are written in [docs/business-logic.md](docs/business-logic.md). The HTTP shapes are in [docs/api.md](docs/api.md).
 
 ## Stack
 
