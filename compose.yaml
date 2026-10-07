@@ -8,7 +8,8 @@ services:
       POSTGRES_PASSWORD: chatbot
       POSTGRES_DB: chatbot
     ports:
-      - "5432:5432"
+      # POSTGRES_PORT lets local setup avoid a host that already uses 5432.
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       # PostgreSQL 18 keeps data in a versioned directory under this path.
       - postgres_data:/var/lib/postgresql

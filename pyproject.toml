@@ -38,3 +38,15 @@ include = ["app*"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff]
+extend-exclude = ["justfile"]
+force-exclude = true
+
+[tool.pyright]
+exclude = ["justfile"]
+ignore = ["justfile"]
+
+[tool.basedpyright]
+exclude = ["justfile"]
+ignore = ["justfile"]
