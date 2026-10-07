@@ -1,0 +1,41 @@
+meta {
+  name: Get Conversation
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/conversations/{{CONVERSATION_ID}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/conversations/{id}
+
+  Returns one conversation owned by the signed-in user.
+
+  A missing id and another user's id both return `404` `not_found`.
+}
+
+tests {
+  test("returns the conversation", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.id).to.equal(bru.getEnvVar("CONVERSATION_ID"));
+    expect(body.title).to.equal("Phase 4 notes");
+  });
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

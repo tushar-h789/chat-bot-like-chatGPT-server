@@ -1,0 +1,142 @@
+meta {
+  name: Register
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{BASE_URL}}/api/v1/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  X-CSRF-Token: {{CSRF_TOKEN}}
+}
+
+body:json {
+  {
+    "email": "{{EMAIL}}",
+    "password": "{{PASSWORD}}"
+  }
+}
+
+docs {
+  # POST /api/v1/auth/register
+
+  Creates an account and sets the HttpOnly `session` cookie. Run **Issue CSRF** first.
+
+  The pre-request script generates a new `EMAIL` so repeated runs do not collide.
+
+  ## Request body
+
+  ```json
+  {
+    "email": "bruno-1710000000000@example.com",
+    "password": "correct-horse-battery"
+  }
+  ```
+
+  Password length is 12 to 128 characters. Email is stored in lowercase.
+
+  ## Response `201`
+
+  ```json
+  {
+    "id": "6f1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a11",
+    "email": "bruno-1710000000000@example.com",
+    "created_at": "2026-10-06T15:40:00.000000Z"
+  }
+  ```
+
+  The password is never returned.
+
+  ## Errors
+
+  `403` `csrf_failed` — missing or wrong `X-CSRF-Token`.
+
+  `409` `email_already_registered` — the email is already used.
+
+  `422` `validation_error` — the password is shorter than 12 characters.
+}
+
+script:pre-request {
+  const email = "bruno-" + Date.now() + "@example.com";
+  bru.setEnvVar("EMAIL", email);
+  bru.setVar("EMAIL", email);
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.getStatus() === 201 && body.id) {
+    bru.setEnvVar("USER_ID", body.id);
+    bru.setVar("USER_ID", body.id);
+  }
+}
+
+tests {
+  test("creates the account", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.email).to.equal(bru.getEnvVar("EMAIL"));
+    expect(body.id).to.be.a("string");
+    expect(body.created_at).to.be.a("string");
+    expect(body.password).to.equal(undefined);
+    expect(JSON.stringify(body)).to.not.include("correct-horse-battery");
+  });
+}
+
+assert {
+  res.status: eq 201
+}
+
+example {
+  name: 201 Created
+  description: Creates the account and starts a session
+
+  request: {
+    url: {{BASE_URL}}/api/v1/auth/register
+    method: POST
+    mode: json
+    headers: {
+      Accept: application/json
+      Content-Type: application/json
+      X-CSRF-Token: {{CSRF_TOKEN}}
+    }
+    body:json: {
+      {
+        "email": "{{EMAIL}}",
+        "password": "{{PASSWORD}}"
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      content-type: application/json
+    }
+
+    status: {
+      code: 201
+      text: Created
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "id": "6f1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a11",
+          "email": "bruno-1710000000000@example.com",
+          "created_at": "2026-10-06T15:40:00.000000Z"
+        }
+      '''
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

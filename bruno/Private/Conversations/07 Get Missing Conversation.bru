@@ -1,0 +1,37 @@
+meta {
+  name: Get Missing Conversation
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/conversations/00000000-0000-4000-8000-000000000001
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/conversations/{id}
+
+  Unknown ids return `404`. Another user's conversation returns the same body, so existence is not revealed.
+}
+
+tests {
+  test("hides a missing conversation", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().error.code).to.equal("not_found");
+  });
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

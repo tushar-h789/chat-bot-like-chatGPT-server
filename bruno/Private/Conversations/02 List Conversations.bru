@@ -1,0 +1,40 @@
+meta {
+  name: List Conversations
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/conversations
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/conversations
+
+  Returns the signed-in user's conversations, newest activity first. Other users' rows are omitted.
+}
+
+tests {
+  test("lists the created conversation", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body).to.be.an("array");
+    expect(JSON.stringify(body)).to.include(bru.getEnvVar("CONVERSATION_ID"));
+    expect(body[0].id).to.equal(bru.getEnvVar("CONVERSATION_ID"));
+  });
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

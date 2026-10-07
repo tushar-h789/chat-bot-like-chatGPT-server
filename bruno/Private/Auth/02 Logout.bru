@@ -1,0 +1,70 @@
+meta {
+  name: Logout
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{BASE_URL}}/api/v1/auth/logout
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-CSRF-Token: {{CSRF_TOKEN}}
+}
+
+docs {
+  # POST /api/v1/auth/logout
+
+  Revokes the current session and clears the `session` cookie. Requires the session cookie and `X-CSRF-Token`.
+
+  No request body.
+
+  ## Response `204`
+
+  Empty body.
+
+  ## Errors
+
+  `401` `unauthenticated` — there is no active session.
+
+  `403` `csrf_failed` — the CSRF header does not match the cookie.
+}
+
+tests {
+  test("revokes the session", function () {
+    expect(res.getStatus()).to.equal(204);
+  });
+}
+
+assert {
+  res.status: eq 204
+}
+
+example {
+  name: 204 No Content
+  description: Revokes the session
+
+  request: {
+    url: {{BASE_URL}}/api/v1/auth/logout
+    method: POST
+    headers: {
+      Accept: application/json
+      X-CSRF-Token: {{CSRF_TOKEN}}
+    }
+  }
+
+  response: {
+    status: {
+      code: 204
+      text: No Content
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

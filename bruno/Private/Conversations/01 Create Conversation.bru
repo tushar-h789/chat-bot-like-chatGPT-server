@@ -1,0 +1,77 @@
+meta {
+  name: Create Conversation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{BASE_URL}}/api/v1/conversations
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  X-CSRF-Token: {{CSRF_TOKEN}}
+}
+
+body:json {
+  {
+    "title": "Phase 4 notes"
+  }
+}
+
+docs {
+  # POST /api/v1/conversations
+
+  Creates a conversation for the signed-in user. Run **Login** first.
+
+  Omit `title` to store `New chat`. A blank title is rejected.
+
+  ## Request body
+
+  ```json
+  {
+    "title": "Phase 4 notes"
+  }
+  ```
+
+  ## Response `201`
+
+  ```json
+  {
+    "id": "6f1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a11",
+    "title": "Phase 4 notes",
+    "created_at": "2026-10-06T15:40:00.000000Z",
+    "updated_at": "2026-10-06T15:40:00.000000Z"
+  }
+  ```
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.getStatus() === 201 && body.id) {
+    bru.setEnvVar("CONVERSATION_ID", body.id);
+    bru.setVar("CONVERSATION_ID", body.id);
+  }
+}
+
+tests {
+  test("creates a conversation", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.title).to.equal("Phase 4 notes");
+    expect(body.id).to.be.a("string");
+    expect(body.user_id).to.equal(undefined);
+  });
+}
+
+assert {
+  res.status: eq 201
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

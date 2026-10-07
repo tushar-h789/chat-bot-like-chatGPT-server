@@ -1,0 +1,44 @@
+meta {
+  name: Create Without CSRF
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{BASE_URL}}/api/v1/conversations
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "title": "Should not be stored"
+  }
+}
+
+docs {
+  # POST /api/v1/conversations
+
+  A session cookie without `X-CSRF-Token` is rejected.
+}
+
+tests {
+  test("rejects a missing csrf token", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().error.code).to.equal("csrf_failed");
+  });
+}
+
+assert {
+  res.status: eq 403
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

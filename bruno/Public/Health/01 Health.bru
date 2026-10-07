@@ -1,0 +1,80 @@
+meta {
+  name: Health
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/health
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/health
+
+  Checks that the API can query PostgreSQL.
+
+  No request body.
+
+  ## Response `200`
+
+  ```json
+  { "status": "ok" }
+  ```
+
+  ## Errors
+
+  `503` `database_unavailable` — Postgres did not accept the check.
+}
+
+tests {
+  test("database is reachable", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().status).to.equal("ok");
+  });
+}
+
+assert {
+  res.status: eq 200
+}
+
+example {
+  name: 200 OK
+  description: Database is reachable
+
+  request: {
+    url: {{BASE_URL}}/api/v1/health
+    method: GET
+    headers: {
+      Accept: application/json
+    }
+  }
+
+  response: {
+    headers: {
+      content-type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        { "status": "ok" }
+      '''
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

@@ -1,0 +1,40 @@
+meta {
+  name: List Messages
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/conversations/{{CONVERSATION_ID}}/messages
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/conversations/{id}/messages
+
+  Returns messages in the conversation, oldest first.
+}
+
+tests {
+  test("returns the stored message", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body).to.be.an("array");
+    expect(body[0].id).to.equal(bru.getEnvVar("MESSAGE_ID"));
+    expect(body[0].content).to.equal("Hello from Bruno");
+  });
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

@@ -1,0 +1,37 @@
+meta {
+  name: Get After Delete
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/conversations/{{CONVERSATION_ID}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/conversations/{id}
+
+  After delete, the same id returns `404` `not_found`.
+}
+
+tests {
+  test("no longer returns the conversation", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().error.code).to.equal("not_found");
+  });
+}
+
+assert {
+  res.status: eq 404
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

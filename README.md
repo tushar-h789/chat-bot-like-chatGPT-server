@@ -4,7 +4,7 @@ FastAPI service for a ChatGPT-style chat. The browser talks only to this API. Th
 
 `AI_PROVIDER` is `gemini` or `openai`. The default is `gemini`. The suggested model is `gemini-3.5-flash-lite`.
 
-The rules this service enforces are in [Business rules](#business-rules). In the full project checkout they are also written in [../docs/business-logic.md](../docs/business-logic.md). The HTTP shapes are in [../docs/api.md](../docs/api.md).
+The rules this service enforces are in [Business rules](#business-rules). The same rules are written in [docs/business-logic.md](docs/business-logic.md). The HTTP shapes are in [docs/api.md](docs/api.md).
 
 ## Stack
 
@@ -70,12 +70,11 @@ Login and register are limited per client address, default 20 per minute. Chat i
 
 ### Out of scope
 
-This service does not pick a model per message, bill a subscription, verify email, or search a private document library. `compose.prod.yaml` in the project root is not started from here.
+This service does not pick a model per message, bill a subscription, verify email, or search a private document library. `compose.prod.yaml` in this repository is not started from here.
 
 ## Local setup
 
 ```bash
-cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
@@ -91,7 +90,7 @@ curl -fsSL https://bootstrap.pypa.io/get-pip.py | .venv/bin/python3
 .venv/bin/pip install -e ".[dev]"
 ```
 
-PostgreSQL starts from the repository root:
+PostgreSQL starts from this directory:
 
 ```bash
 docker compose up -d postgres
@@ -106,7 +105,7 @@ alembic upgrade head
 curl http://127.0.0.1:8000/api/v1/health
 ```
 
-A healthy database returns `{"status":"ok"}`. `GET /api/v1/health/live` checks the process only. The Bruno collection is `bruno/` at the project root. It does not call `POST /api/v1/chat`.
+A healthy database returns `{"status":"ok"}`. `GET /api/v1/health/live` checks the process only. The Bruno collection is `bruno/` in this repository. It does not call `POST /api/v1/chat`.
 
 Put `GEMINI_API_KEY` and `GEMINI_MODEL` in `.env` only. Copy the names from `.env.example`. Get a key from [Google AI Studio](https://aistudio.google.com/apikey). Do not paste the key into chat. `OPENAI_API_KEY` and `OPENAI_MODEL` stay empty unless `AI_PROVIDER=openai`.
 

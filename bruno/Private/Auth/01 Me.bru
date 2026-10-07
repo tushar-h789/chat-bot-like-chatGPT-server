@@ -1,0 +1,89 @@
+meta {
+  name: Me
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/auth/me
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/auth/me
+
+  Current user. Run **Public / Auth / Register** or **Login** first. Bruno sends the `session` cookie. There is no request body.
+
+  ## Response `200`
+
+  ```json
+  {
+    "id": "6f1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a11",
+    "email": "bruno-1710000000000@example.com",
+    "created_at": "2026-10-06T15:40:00.000000Z"
+  }
+  ```
+
+  ## Errors
+
+  `401` `unauthenticated` — the session cookie is missing, expired, or revoked.
+}
+
+tests {
+  test("returns the signed-in user", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.email).to.equal(bru.getEnvVar("EMAIL"));
+    expect(body.id).to.equal(bru.getEnvVar("USER_ID"));
+    expect(body.password).to.equal(undefined);
+  });
+}
+
+assert {
+  res.status: eq 200
+}
+
+example {
+  name: 200 OK
+  description: Returns the signed-in user
+
+  request: {
+    url: {{BASE_URL}}/api/v1/auth/me
+    method: GET
+    headers: {
+      Accept: application/json
+    }
+  }
+
+  response: {
+    headers: {
+      content-type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "id": "6f1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a11",
+          "email": "bruno-1710000000000@example.com",
+          "created_at": "2026-10-06T15:40:00.000000Z"
+        }
+      '''
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

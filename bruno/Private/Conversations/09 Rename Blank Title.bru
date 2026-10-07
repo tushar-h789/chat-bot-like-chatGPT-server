@@ -1,0 +1,46 @@
+meta {
+  name: Rename Blank Title
+  type: http
+  seq: 9
+}
+
+patch {
+  url: {{BASE_URL}}/api/v1/conversations/{{CONVERSATION_ID}}
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  X-CSRF-Token: {{CSRF_TOKEN}}
+}
+
+body:json {
+  {
+    "title": "   "
+  }
+}
+
+docs {
+  # PATCH /api/v1/conversations/{id}
+
+  A title that is empty after trimming returns `422` `validation_error`. The previous title stays in place.
+}
+
+tests {
+  test("rejects a blank title", function () {
+    expect(res.getStatus()).to.equal(422);
+    expect(res.getBody().error.code).to.equal("validation_error");
+    expect(JSON.stringify(res.getBody())).to.not.include("Phase 4 notes");
+  });
+}
+
+assert {
+  res.status: eq 422
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

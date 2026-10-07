@@ -1,0 +1,103 @@
+meta {
+  name: Register Duplicate
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{BASE_URL}}/api/v1/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  X-CSRF-Token: {{CSRF_TOKEN}}
+}
+
+body:json {
+  {
+    "email": "{{EMAIL}}",
+    "password": "{{PASSWORD}}"
+  }
+}
+
+docs {
+  # POST /api/v1/auth/register
+
+  Registers `EMAIL` again after **Register**.
+
+  ## Response `409`
+
+  ```json
+  {
+    "error": {
+      "code": "email_already_registered",
+      "message": "An account with this email already exists."
+    }
+  }
+  ```
+}
+
+tests {
+  test("rejects an email that is already registered", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().error.code).to.equal("email_already_registered");
+    expect(res.getBody().error.message).to.equal("An account with this email already exists.");
+  });
+}
+
+assert {
+  res.status: eq 409
+}
+
+example {
+  name: 409 Conflict
+  description: Email is already registered
+
+  request: {
+    url: {{BASE_URL}}/api/v1/auth/register
+    method: POST
+    mode: json
+    headers: {
+      Accept: application/json
+      Content-Type: application/json
+      X-CSRF-Token: {{CSRF_TOKEN}}
+    }
+    body:json: {
+      {
+        "email": "{{EMAIL}}",
+        "password": "{{PASSWORD}}"
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      content-type: application/json
+    }
+
+    status: {
+      code: 409
+      text: Conflict
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "error": {
+            "code": "email_already_registered",
+            "message": "An account with this email already exists."
+          }
+        }
+      '''
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

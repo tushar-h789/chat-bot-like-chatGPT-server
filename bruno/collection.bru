@@ -1,0 +1,11 @@
+meta {
+  name: AI Chatbot API
+  type: http
+}
+
+script:pre-request {
+  // Pick Local or Production from the environment menu.
+  // Public routes do not need a session.
+  // Private routes use the session cookie saved by Register or Login.
+  // POST, PATCH, and DELETE send X-CSRF-Token from CSRF_TOKEN, except the requests that omit it on purpose.
+}

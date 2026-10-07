@@ -1,0 +1,82 @@
+meta {
+  name: Create Message
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{BASE_URL}}/api/v1/conversations/{{CONVERSATION_ID}}/messages
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  X-CSRF-Token: {{CSRF_TOKEN}}
+}
+
+body:json {
+  {
+    "content": "Hello from Bruno"
+  }
+}
+
+docs {
+  # POST /api/v1/conversations/{id}/messages
+
+  Stores a user message. The server sets `role` to `user` and `status` to `complete`. A `role` field in the body is ignored.
+
+  Content cannot be blank. The default maximum length is 16000 characters (`MAX_MESSAGE_CHARS`).
+
+  ## Request body
+
+  ```json
+  {
+    "content": "Hello from Bruno"
+  }
+  ```
+
+  ## Response `201`
+
+  ```json
+  {
+    "id": "8a1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a22",
+    "conversation_id": "6f1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a11",
+    "role": "user",
+    "content": "Hello from Bruno",
+    "status": "complete",
+    "created_at": "2026-10-06T15:41:00.000000Z",
+    "updated_at": "2026-10-06T15:41:00.000000Z"
+  }
+  ```
+}
+
+script:post-response {
+  const body = res.getBody();
+  if (res.getStatus() === 201 && body.id) {
+    bru.setEnvVar("MESSAGE_ID", body.id);
+    bru.setVar("MESSAGE_ID", body.id);
+  }
+}
+
+tests {
+  test("stores the user message", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.id).to.be.a("string");
+    expect(body.conversation_id).to.equal(bru.getEnvVar("CONVERSATION_ID"));
+    expect(body.role).to.equal("user");
+    expect(body.content).to.equal("Hello from Bruno");
+    expect(body.status).to.equal("complete");
+  });
+}
+
+assert {
+  res.status: eq 201
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

@@ -1,0 +1,37 @@
+meta {
+  name: Delete Conversation
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{BASE_URL}}/api/v1/conversations/{{CONVERSATION_ID}}
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-CSRF-Token: {{CSRF_TOKEN}}
+}
+
+docs {
+  # DELETE /api/v1/conversations/{id}
+
+  Deletes the conversation and its messages. Response `204` has an empty body.
+}
+
+tests {
+  test("deletes the conversation", function () {
+    expect(res.getStatus()).to.equal(204);
+  });
+}
+
+assert {
+  res.status: eq 204
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

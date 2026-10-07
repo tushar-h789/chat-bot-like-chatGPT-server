@@ -1,0 +1,45 @@
+meta {
+  name: Rename Conversation
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{BASE_URL}}/api/v1/conversations/{{CONVERSATION_ID}}
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  X-CSRF-Token: {{CSRF_TOKEN}}
+}
+
+body:json {
+  {
+    "title": "Renamed in Bruno"
+  }
+}
+
+docs {
+  # PATCH /api/v1/conversations/{id}
+
+  Renames a conversation owned by the signed-in user. Title length is 1 to 200 characters after trimming.
+}
+
+tests {
+  test("renames the conversation", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().title).to.equal("Renamed in Bruno");
+  });
+}
+
+assert {
+  res.status: eq 200
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}

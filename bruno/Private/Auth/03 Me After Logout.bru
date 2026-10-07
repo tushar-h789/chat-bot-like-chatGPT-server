@@ -1,0 +1,85 @@
+meta {
+  name: Me After Logout
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/auth/me
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/auth/me
+
+  Run **Logout** first. The revoked session is rejected.
+
+  ## Response `401`
+
+  ```json
+  {
+    "error": {
+      "code": "unauthenticated",
+      "message": "Authentication is required."
+    }
+  }
+  ```
+}
+
+tests {
+  test("rejects the revoked session", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().error.code).to.equal("unauthenticated");
+    expect(res.getBody().error.message).to.equal("Authentication is required.");
+  });
+}
+
+assert {
+  res.status: eq 401
+}
+
+example {
+  name: 401 Unauthorized
+  description: Session was revoked
+
+  request: {
+    url: {{BASE_URL}}/api/v1/auth/me
+    method: GET
+    headers: {
+      Accept: application/json
+    }
+  }
+
+  response: {
+    headers: {
+      content-type: application/json
+    }
+
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "error": {
+            "code": "unauthenticated",
+            "message": "Authentication is required."
+          }
+        }
+      '''
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}
