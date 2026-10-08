@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     rate_limit_auth_per_minute: int = Field(default=20, ge=0, le=10_000)
     rate_limit_chat_per_minute: int = Field(default=30, ge=0, le=10_000)
     usage_limit_tokens_per_day: int = Field(default=100_000, ge=0, le=100_000_000)
+    admin_emails: str = ""
     gemini_input_usd_per_million: float | None = None
     gemini_output_usd_per_million: float | None = None
     openai_input_usd_per_million: float | None = None
@@ -46,6 +47,15 @@ class Settings(BaseSettings):
         return [
             origin.strip() for origin in self.cors_origins.split(",") if origin.strip()
         ]
+
+    @computed_field
+    @property
+    def admin_email_set(self) -> frozenset[str]:
+        return frozenset(
+            email.strip().lower()
+            for email in self.admin_emails.split(",")
+            if email.strip()
+        )
 
 
 @lru_cache

@@ -22,6 +22,8 @@ Email is trimmed and stored in lowercase. Passwords are 12 to 128 characters and
 
 Login creates an opaque session token in an `HttpOnly` `session` cookie. The database stores only the SHA-256 hash. The session lasts 7 days from creation and is not extended later. Logout revokes it. State-changing requests also need a double-submit CSRF token. Cookies are `Secure` only when `ENVIRONMENT=production`.
 
+`GET /api/v1/admin/stats` is limited to admins. Set `ADMIN_EMAILS` to a comma-separated list, or set `users.is_admin`. A normal signed-in user receives `403`.
+
 ### Ownership
 
 Every conversation, message, file, and usage query uses the user id from the session. Another person's row is `404`, the same as a missing row.

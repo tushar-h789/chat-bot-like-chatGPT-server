@@ -22,6 +22,7 @@ The browser sends cookies. It does not send the session token in `Authorization`
 | `email_already_registered` | 409 | Register used an email that already exists. |
 | `invalid_credentials` | 401 | Login email or password is wrong. Both cases use this body. |
 | `unauthenticated` | 401 | Session cookie is missing, expired, or revoked. |
+| `forbidden` | 403 | A signed-in user called an admin route without `is_admin` or `ADMIN_EMAILS`. |
 | `not_found` | 404 | Conversation is missing, or it belongs to someone else. |
 | `database_unavailable` | 503 | Health check could not query PostgreSQL. |
 | `rate_limited` | 429 | Too many login, register, or chat requests in one minute. |
@@ -88,7 +89,8 @@ Response 201:
 {
   "id": "6f1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a11",
   "email": "ada@example.com",
-  "created_at": "2026-10-06T15:40:00.000000Z"
+  "created_at": "2026-10-06T15:40:00.000000Z",
+  "is_admin": false
 }
 ```
 
@@ -108,7 +110,36 @@ Response 204 with an empty body. The session row is revoked and the session cook
 
 Requires the session cookie.
 
-Response 200: the same user shape as register.
+Response 200: the same user shape as register. `is_admin` is true when the user row is flagged or the email is in `ADMIN_EMAILS`.
+
+## GET /api/v1/admin/stats
+
+Requires the session cookie. The signed-in user must be an admin (`users.is_admin` or an email listed in `ADMIN_EMAILS`). Anyone else receives `403` `forbidden`. A missing session is `401` `unauthenticated`.
+
+Totals cover every account. `users` is the 200 most recently created accounts. Password hashes are not included.
+
+```json
+{
+  "total_users": 12,
+  "active_sessions": 3,
+  "users_with_usage": 5,
+  "replies": 40,
+  "input_tokens": 1200,
+  "output_tokens": 3400,
+  "total_tokens": 4600,
+  "tokens_today": 180,
+  "users": [
+    {
+      "id": "6f1c1c4e-8a0d-4f0a-9d4a-1e6d0c2b9a11",
+      "email": "ada@example.com",
+      "created_at": "2026-10-06T15:40:00.000000Z",
+      "is_admin": false,
+      "replies": 2,
+      "total_tokens": 80
+    }
+  ]
+}
+```
 
 ## POST /api/v1/conversations
 
@@ -309,6 +340,7 @@ Folders follow the public/private split:
 - `Public/Auth` for CSRF, register, login, and the failure requests
 - `Private/Conversations` for create, list, rename, messages, and delete
 - `Private/Auth` for the current user and logout
+- `Private/Admin` for account and usage totals
 
 From the collection directory:
 

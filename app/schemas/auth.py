@@ -15,6 +15,7 @@ class UserResponse(BaseModel):
     id: UUID
     email: EmailStr
     created_at: datetime
+    is_admin: bool
 
 
 class CsrfResponse(BaseModel):

@@ -90,6 +90,7 @@ def test_register_logs_in_and_stores_a_password_hash(email: str) -> None:
         assert response.status_code == 201
         body = response.json()
         assert body["email"] == email
+        assert body["is_admin"] is False
         assert "password" not in body
         assert PASSWORD not in response.text
         session_cookie = response.headers.get("set-cookie", "")

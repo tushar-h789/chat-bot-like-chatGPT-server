@@ -11,9 +11,10 @@ from app.core.security import (
     set_csrf_cookie,
     set_session_cookie,
 )
+from app.core.admin import to_user_response
 from app.db.models.user import User
 from app.schemas.auth import Credentials, CsrfResponse, UserResponse
-from app.services.auth import AuthService
+from app.services.auth import AuthService, normalize_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,10 +38,16 @@ async def register(
     _: None = Depends(limit_auth),
     __: None = Depends(require_csrf),
     db: AsyncSession = Depends(get_db),
-) -> User:
-    user, token = await AuthService(db).register(credentials.email, credentials.password)
-    set_session_cookie(response, token, _settings(request))
-    return user
+) -> UserResponse:
+    settings = _settings(request)
+    email = normalize_email(credentials.email)
+    user, token = await AuthService(db).register(
+        credentials.email,
+        credentials.password,
+        grant_admin=email in settings.admin_email_set,
+    )
+    set_session_cookie(response, token, settings)
+    return to_user_response(user, settings)
 
 
 @router.post("/login", response_model=UserResponse)
@@ -51,10 +58,16 @@ async def login(
     _: None = Depends(limit_auth),
     __: None = Depends(require_csrf),
     db: AsyncSession = Depends(get_db),
-) -> User:
-    user, token = await AuthService(db).login(credentials.email, credentials.password)
-    set_session_cookie(response, token, _settings(request))
-    return user
+) -> UserResponse:
+    settings = _settings(request)
+    email = normalize_email(credentials.email)
+    user, token = await AuthService(db).login(
+        credentials.email,
+        credentials.password,
+        grant_admin=email in settings.admin_email_set,
+    )
+    set_session_cookie(response, token, settings)
+    return to_user_response(user, settings)
 
 
 @router.post("/logout", status_code=204)
@@ -71,5 +84,8 @@ async def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-async def current_user(user: User = Depends(get_current_user)) -> User:
-    return user
+async def current_user(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> UserResponse:
+    return to_user_response(user, _settings(request))

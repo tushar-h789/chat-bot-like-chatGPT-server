@@ -21,6 +21,7 @@ There is no model picker, no subscription, no email verification, and no retriev
 - State-changing cookie requests need a double-submit CSRF token: the `csrf_token` cookie and the `X-CSRF-Token` header must match.
 - Cookies are `Secure` only when `ENVIRONMENT=production`. `SameSite` is `Lax`.
 - `get_current_user` is the only place a request becomes a user. A later auth provider can replace that seam.
+- Admin routes use `get_current_admin`. Access is `users.is_admin` or an email in `ADMIN_EMAILS`. Anyone else receives `403 forbidden`. `GET /api/v1/admin/stats` returns account and usage totals. It does not change chat ownership rules.
 
 ## Ownership
 

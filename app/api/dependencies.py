@@ -3,6 +3,8 @@ from collections.abc import AsyncIterator
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.admin import user_is_admin
+from app.core.config import Settings
 from app.core.errors import AppError
 from app.core.security import CSRF_COOKIE, SESSION_COOKIE, tokens_match
 from app.db.models.user import User
@@ -46,6 +48,20 @@ async def get_current_user(
             status_code=401,
         )
     return await AuthService(db).authenticate(raw_token)
+
+
+async def get_current_admin(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> User:
+    settings: Settings = request.app.state.settings
+    if not user_is_admin(user, settings):
+        raise AppError(
+            code="forbidden",
+            message="Admin access is required.",
+            status_code=403,
+        )
+    return user
 
 
 async def limit_chat(

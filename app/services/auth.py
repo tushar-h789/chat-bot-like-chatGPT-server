@@ -42,8 +42,18 @@ class AuthService:
         self._users = UserRepository(session)
         self._sessions = SessionRepository(session)
 
-    async def register(self, email: str, password: str) -> tuple[User, str]:
-        user = User(email=normalize_email(email), password_hash=hash_password(password))
+    async def register(
+        self,
+        email: str,
+        password: str,
+        *,
+        grant_admin: bool = False,
+    ) -> tuple[User, str]:
+        user = User(
+            email=normalize_email(email),
+            password_hash=hash_password(password),
+            is_admin=grant_admin,
+        )
         self._users.add(user)
         try:
             await self._session.flush()
@@ -60,11 +70,19 @@ class AuthService:
         await self._session.refresh(user)
         return user, raw_token
 
-    async def login(self, email: str, password: str) -> tuple[User, str]:
+    async def login(
+        self,
+        email: str,
+        password: str,
+        *,
+        grant_admin: bool = False,
+    ) -> tuple[User, str]:
         user = await self._users.get_by_email(normalize_email(email))
         password_hash = user.password_hash if user is not None else dummy_password_hash()
         if user is None or not verify_password(password, password_hash):
             raise _invalid_login()
+        if grant_admin and not user.is_admin:
+            user.is_admin = True
 
         raw_token = await self._create_session(user)
         await self._session.commit()

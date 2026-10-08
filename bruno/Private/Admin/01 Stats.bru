@@ -1,0 +1,54 @@
+meta {
+  name: Stats
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/admin/stats
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+}
+
+docs {
+  # GET /api/v1/admin/stats
+
+  Account and usage totals. The signed-in user must be an admin. Bruno sends the `session` cookie. There is no request body.
+
+  ## Response `200`
+
+  Totals for every account, plus the 200 newest users.
+
+  ## Errors
+
+  `401` `unauthenticated` — the session cookie is missing, expired, or revoked.
+
+  `403` `forbidden` — the signed-in user is not an admin.
+}
+
+tests {
+  test("returns admin totals or forbids a normal user", function () {
+    const status = res.getStatus();
+    expect([200, 403]).to.include(status);
+    if (status === 200) {
+      const body = res.getBody();
+      expect(body.total_users).to.be.a("number");
+      expect(body.users).to.be.an("array");
+    } else {
+      expect(res.getBody().error.code).to.equal("forbidden");
+    }
+  });
+}
+
+assert {
+  res.status: in [200, 403]
+}
+
+settings {
+  encodeUrl: true
+  timeout: 25000
+}
